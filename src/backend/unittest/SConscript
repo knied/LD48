@@ -1,0 +1,6 @@
+Import('env')
+
+checker_sources = ['checker.cpp']
+
+checker_env = env.Clone()
+checker_env.UnitTest('checker', checker_sources)

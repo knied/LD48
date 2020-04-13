@@ -1,0 +1,5 @@
+Import('env')
+
+subdirs = ['backend']
+for subdir in subdirs:
+    SConscript('%s/SConscript'%subdir)

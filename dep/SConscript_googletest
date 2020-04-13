@@ -1,0 +1,47 @@
+import os
+
+Import('env')
+
+AddOption('--check', dest='check', action='store_true', default=False, help="run unit-tests")
+
+gtest_include_dir = '#' + Dir('googletest/googletest/include').path
+gmock_include_dir = '#' + Dir('googletest/googlemock/include').path
+googletest_lib_dir = '#' + Dir('.').path
+
+def UseGoogleTest(self):
+    self.Append(CPPPATH = [gtest_include_dir, gmock_include_dir],
+                LIBPATH = [googletest_lib_dir],
+                LIBS = ['gtest', 'gmock'])
+AddMethod(Environment, UseGoogleTest)
+
+def builder_unit_test(target, source, env):
+    app = str(source[0].abspath)
+    if os.spawnl(os.P_WAIT, app, app)==0:
+        open(str(target[0]),'w').write("PASSED\n")
+    else:
+        return 1
+def emitter_unit_test(target, source, env):
+    name = target[0].abspath
+    target = [name + '.passed']
+    return target, source
+bld = Builder(action = builder_unit_test,
+              emitter = emitter_unit_test)
+env.Append(BUILDERS = {'Test' :  bld})
+
+def UnitTest(self, name, sources):
+    if not GetOption('check'):
+        return
+    self.UseGoogleTest()
+    program = self.Program(name, sources)
+    test = self.Test(name, program)
+    self.AlwaysBuild(test)
+    #self.Alias("check", test[0].abspath)
+AddMethod(Environment, UnitTest)
+
+subdirs = ['googletest',
+           'googlemock']
+
+env.Library('gtest', ['googletest/googletest/src/gtest-all.cc'],
+            CPPPATH = ['googletest/googletest/include', 'googletest/googletest'])
+env.Library('gmock', ['googletest/googlemock/src/gmock-all.cc'],
+            CPPPATH = ['googletest/googletest/include', 'googletest/googlemock/include', 'googletest/googlemock'])

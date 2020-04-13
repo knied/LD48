@@ -1,0 +1,6 @@
+Import('env')
+
+dependencies = ['googletest']
+
+for dependency in dependencies:
+    SConscript('SConscript_%s'%dependency)

@@ -1,6 +1,6 @@
 Import('env')
 
-backend_sources = ['main.cpp']
+backend_sources = ['main.cpp', 'Socket.cpp']
 
 backend_env = env.Clone()
 backend = backend_env.Program('backend', backend_sources)

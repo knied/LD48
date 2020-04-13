@@ -6,6 +6,7 @@ AddOption('--with-symbols', dest='debug', action='store_true', default=False, he
 AddOption('--with-assertions', dest='assertions', action='store_true', default=False, help="build with debug symbols")
 AddOption('--non-optimized', dest='optimize', action='store_false', default=True, help="create non optimized build")
 AddOption('--prefix', dest='prefix', action='store', default='#/install', help="install location")
+AddOption('--run', dest='run', action='store_true', default=False, help="run programs")
 
 env = Environment(tools = ['default', 'clang', 'clangxx'])
 
@@ -20,6 +21,18 @@ if not GetOption('assertions'):
 
 env['PREFIX'] = GetOption('prefix')
 env.Alias('install', env['PREFIX'])
+
+################################################################################
+# Methods
+################################################################################
+
+def RunProgram(self, program, args):
+    if GetOption('run'):
+        run = self.Command(target = 'output.log',
+                           source = [program[0].abspath],
+                           action = '$SOURCE %s | tee $TARGET' % (' '.join(args)))
+        self.AlwaysBuild(run)
+AddMethod(Environment, RunProgram)
 
 ################################################################################
 # SConscripts

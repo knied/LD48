@@ -5,6 +5,8 @@ backend_sources = ['main.cpp']
 backend_env = env.Clone()
 backend = backend_env.Program('backend', backend_sources)
 
+env.RunProgram(backend, ['hello'])
+
 subdirs = ['unittest']
 for subdir in subdirs:
     SConscript('%s/SConscript'%subdir)

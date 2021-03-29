@@ -1,3 +1,5 @@
 .sconsign.dblite
+/install
 /build_dep
 /build
+setup.sh

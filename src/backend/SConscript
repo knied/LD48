@@ -1,12 +1,15 @@
 Import('env')
 
-backend_sources = ['main.cpp', 'Socket.cpp']
+backend_sources = ['Socket.cpp', 'http.cpp', 'fs.cpp']
 
 backend_env = env.Clone()
-backend = backend_env.Program('backend', backend_sources)
-
-env.RunProgram(backend, ['hello'])
+backend_env.Append(LIBS = ['ev', 'tls'])
+backend_objs = backend_env.Object(backend_sources)
+server = backend_env.Program('server', backend_objs + ['main.cpp'])
+backend = Install(backend_env['PREFIX'], server)
 
 subdirs = ['unittest']
 for subdir in subdirs:
-    SConscript('%s/SConscript'%subdir)
+    SConscript('%s/SConscript'%subdir, exports=['backend_env', 'backend_objs'])
+
+Return('backend')

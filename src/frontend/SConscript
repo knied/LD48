@@ -1,0 +1,42 @@
+import os
+Import('env')
+
+frontend_env = env.Clone()
+
+def builder_frontend(target, source, env):
+    whitelist = open(target[0].abspath, 'w')
+    index = open(target[1].abspath, 'w')
+    index.write("<!DOCTYPE html>\n")
+    index.write("<html>\n")
+    index.write("  <head>\n")
+    index.write("    <title>Game</title>\n")
+    
+    whitelist.write(os.path.basename(target[1].abspath) + '\n')
+    for s in source:
+        basename = os.path.basename(s.abspath)
+        if basename.endswith('.css'):
+            index.write("    <link rel='stylesheet' type='text/css' href='" + basename + "'>\n")
+        if s.abspath.endswith('.js'):
+            index.write("    <script type='text/javascript' src='" + basename + "'></script>\n")
+        whitelist.write(basename + '\n')
+
+    index.write("  </head>\n")
+    index.write("  <body></body>\n")
+    index.write("</html>\n")
+    
+def emitter_frontend(target, source, env):
+    target += ['index.html']
+    return target, source
+    
+bld = Builder(action = builder_frontend,
+              emitter = emitter_frontend)
+frontend_env.Append(BUILDERS = {'Frontend' :  bld})
+
+wasm_sources = ['add.cpp', 'websocket.cpp', 'graphics.cpp']
+wasm = frontend_env.Wasm('add.wasm', wasm_sources)
+
+static_sources = ['main.js', 'main.css'] + wasm
+generated = frontend_env.Frontend('whitelist.ini', static_sources)
+frontend = Install(frontend_env['PREFIX'] + '/web', generated)
+
+Return('frontend')

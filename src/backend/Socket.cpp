@@ -117,11 +117,11 @@ static bool makeNonBlocking(int socket) {
 Socket::Socket()
   : mSocket(-1) {}
 
-Socket::Socket(int fd)
-  : mSocket(fd < 0 ? -1 : fd) {}
+Socket::Socket(int fd, TLSContext&& tls)
+  : mSocket(fd < 0 ? -1 : fd), mTls(std::move(tls)) {}
 
-Socket::Socket(AddressInfo const& info, int maxQueue)
-  : mSocket(-1) {
+Socket::Socket(AddressInfo const& info, int maxQueue, TLSConfig const& tlsConfig)
+  : mSocket(-1), mTls(tlsConfig) {
   mSocket = socket(info.ai_family, info.ai_socktype, 0);
   if (mSocket < 0) {
     mSocket = -1;
@@ -148,7 +148,8 @@ Socket::Socket(AddressInfo const& info, int maxQueue)
 }
 
 Socket::Socket(Socket&& nbs)
-  : mSocket(nbs.mSocket) {
+  : mSocket(nbs.mSocket)
+  , mTls(std::move(nbs.mTls)) {
   nbs.mSocket = -1;
 }
 
@@ -160,9 +161,8 @@ Socket::~Socket() {
 Socket const&
 Socket::operator = (Socket&& nbs) {
   close();
-  int tmp = mSocket;
-  mSocket = nbs.mSocket;
-  nbs.mSocket = tmp;
+  std::swap(mSocket, nbs.mSocket);
+  std::swap(mTls, nbs.mTls);
   return *this;
 }
 
@@ -177,98 +177,122 @@ void Socket::close() {
   mSocket = -1;
 }
 
-Socket Socket::accept() {
+struct async_accept_impl {
+  static constexpr int events = EV_READ;
+  static constexpr decltype(::accept)* func = ::accept;
+  static inline bool is_ready(int result) {
+    return result >= 0 || (errno != EAGAIN && errno != EWOULDBLOCK);
+  }
+};
+using async_accept = event::io_operation<async_accept_impl, decltype(::accept)>;
+struct async_tls_handshake_impl {
+  static constexpr int events = EV_READ | EV_WRITE;
+  static constexpr decltype(::tls_handshake)* func = ::tls_handshake;
+  static inline bool is_ready(int result) {
+    return result == 0 || (result != TLS_WANT_POLLIN && result != TLS_WANT_POLLOUT);
+  }
+};
+using async_tls_handshake = event::io_operation<async_tls_handshake_impl, decltype(::tls_handshake)>;
+coro::task<Socket> Socket::async_accept(event::scheduler& s) {
   sockaddr_storage clientAddress;
   socklen_t clientAddressLength = sizeof(clientAddress);
   int client;
   do {
-    client = ::accept(mSocket,
-                      (sockaddr*)&clientAddress,
-                      &clientAddressLength);
+    client = co_await ::async_accept(s, mSocket, mSocket,
+                                     (sockaddr*)&clientAddress,
+                                     &clientAddressLength);
   } while (client == -1 && errno == EINTR);
   if (client == -1) {
-    return Socket();
+    co_return Socket();
   }
   
   if (!makeNonBlocking(client)) {
     ::close(client);
-    return Socket();
+    co_return Socket();
   }
-  
-  return Socket(client);
-}
 
-bool Socket::receive(char* buffer, std::size_t* size) {
-  ssize_t bytes = ::recv(mSocket, buffer, *size, 0);
-  if (bytes <= 0) {
-    return false;
+  auto context = mTls.accept(client);
+  /*if (0 != co_await ::async_tls_handshake(s, mSocket, context.context())) {
+    co_return Socket();
   }
-  *size = static_cast<std::size_t>(bytes);
-  return true;
+  std::cout << "hello!" << std::endl;*/
+  co_return Socket(client, std::move(context));
 }
 
-bool Socket::send(char const* buffer,
-                             std::size_t bufferSize) {
-  ssize_t offset = 0;
-  while (offset < bufferSize) {
-    ssize_t result = ::send(mSocket, buffer + offset, bufferSize - offset, 0);
-    if (result < 0 && errno != EINTR && errno != EAGAIN) {
-      std::cout << "WARNING: send failed after " << offset << " bytes." << std::endl;
-      std::cout << "  errno(" << errno << "): " << strerror(errno) << std::endl;
-      return false;
-    }
-    if (result > 0) {
-      offset += result;
-    }
+struct async_tls_read_impl {
+  static constexpr int events = EV_READ;
+  static constexpr decltype(::tls_read)* func = ::tls_read;
+  static inline bool is_ready(ssize_t result) {
+    return result >= 0 || (result != TLS_WANT_POLLIN);
   }
-  return true;
+};
+using async_tls_read = event::io_operation<async_tls_read_impl, decltype(::tls_read)>;
+coro::task<std::size_t> Socket::async_read(event::scheduler& s, char* buffer, std::size_t count) {
+  auto result = co_await async_tls_read(s, mSocket, mTls.context(), buffer, count);
+  if (result >= 0) {
+    co_return result;
+  }
+  auto error_msg = tls_error(mTls.context());
+  if (error_msg != nullptr) {
+    throw std::runtime_error(error_msg);
+  } else {
+    throw std::runtime_error("tls_read failed");
+  }
+  co_return 0;
 }
 
-bool Socket::send(std::uint8_t const* buffer,
-                             std::size_t bufferSize) {
-  return send(reinterpret_cast<char const*>(buffer), bufferSize);
+struct async_tls_write_impl {
+  static constexpr int events = EV_WRITE;
+  static constexpr decltype(::tls_write)* func = ::tls_write;
+  static inline bool is_ready(ssize_t result) {
+    return result >= 0 || (result != TLS_WANT_POLLOUT);
+  }
+};
+using async_tls_write = event::io_operation<async_tls_write_impl, decltype(::tls_write)>;
+coro::task<std::size_t> Socket::async_write(event::scheduler& s, char const* buffer, std::size_t count) {
+  auto result = co_await async_tls_write(s, mSocket, mTls.context(), buffer, count);
+  if (result >= 0) {
+    co_return result;
+  }
+  auto error_msg = tls_error(mTls.context());
+  if (error_msg != nullptr) {
+    throw std::runtime_error(error_msg);
+  } else {
+    throw std::runtime_error("tls_read failed");
+  }
+  co_return 0;
 }
 
-bool Socket::send(std::string const& string) {
-  return send(string.data(), string.size());
+std::string Socket::getLocalName() const {
+  std::string local = "<nobody>";
+  sockaddr_storage address;
+  socklen_t addressLength = sizeof(address);
+  if (getsockname(mSocket, reinterpret_cast<sockaddr*>(&address),
+                  &addressLength) == 0) {
+    assert(addressLength <= sizeof(address));
+    local = addressToString(reinterpret_cast<sockaddr*>(&address),
+                            addressLength);
+  }
+  return local;
 }
 
-int Socket::descriptor() const {
-  return mSocket;
+std::string Socket::getRemoteName() const {
+  std::string remote = "<nobody>";
+  sockaddr_storage address;
+  socklen_t addressLength = sizeof(address);
+  if (getpeername(mSocket, reinterpret_cast<sockaddr*>(&address),
+                  &addressLength) == 0) {
+    assert(addressLength <= sizeof(address));
+    remote = addressToString(reinterpret_cast<sockaddr*>(&address),
+                             addressLength);
+  }
+  return remote;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 
-std::ostream& operator << (std::ostream& stream,
-                           Socket const& socket) {
-  int fd = socket.descriptor();
-  std::string local = "<nobody>";
-  std::string remote = "<nobody>";
-
-  {
-    sockaddr_storage address;
-    socklen_t addressLength = sizeof(address);
-    if (getsockname(fd, reinterpret_cast<sockaddr*>(&address),
-                    &addressLength) == 0) {
-      assert(addressLength <= sizeof(address));
-      local = addressToString(reinterpret_cast<sockaddr*>(&address),
-                              addressLength);
-    }
-  }
-
-  {
-    sockaddr_storage address;
-    socklen_t addressLength = sizeof(address);
-    if (getpeername(fd, reinterpret_cast<sockaddr*>(&address),
-                    &addressLength) == 0) {
-      assert(addressLength <= sizeof(address));
-      remote = addressToString(reinterpret_cast<sockaddr*>(&address),
-                               addressLength);
-    }
-  }
-
-  stream << local << " <-> " << remote;
-  
+std::ostream& operator << (std::ostream& stream, Socket const& socket) {
+  stream << socket.getLocalName() << " <-> " << socket.getRemoteName();
   return stream;
 }
 

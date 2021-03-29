@@ -1,5 +1,9 @@
 Import('env')
 
-subdirs = ['backend']
-for subdir in subdirs:
-    SConscript('%s/SConscript'%subdir)
+backend = SConscript('backend/SConscript')
+frontend = SConscript('frontend/SConscript')
+
+env.RunProgram(backend + frontend,
+               backend, ['--root', str(env.Dir(env['PREFIX'] + '/web')),
+                         '--cert', env['SERVER_CERT'],
+                         '--key', env['SERVER_KEY']])

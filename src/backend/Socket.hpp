@@ -5,6 +5,8 @@
 
 ////////////////////////////////////////////////////////////////////////////////
 
+#include "event.hpp"
+#include "TLS.hpp"
 #include <iostream>
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -67,11 +69,9 @@ std::ostream& operator << (std::ostream& stream, AddressInfo const& info);
 ////////////////////////////////////////////////////////////////////////////////
 
 class Socket {
-  int mSocket;
-  
- public:
+public:
   Socket();
-  Socket(AddressInfo const& info, int maxQueue);
+  Socket(AddressInfo const& info, int maxQueue, TLSConfig const& tlsConfig);
   Socket(Socket&& nbs);
   Socket(Socket const&) = delete;
   Socket const& operator = (Socket const&) = delete;
@@ -79,18 +79,21 @@ class Socket {
   
   Socket const& operator = (Socket&& nbs);
   operator bool() const;
-  
   void close();
-  Socket accept();
-  bool receive(char* buffer, std::size_t* length);
-  bool send(char const* buffer, std::size_t length);
-  bool send(std::uint8_t const* buffer, std::size_t length);
-  bool send(std::string const& string);
-  int descriptor() const;
 
- private:
-  Socket(int fd);
+  coro::task<Socket> async_accept(event::scheduler& s);
+  coro::task<std::size_t> async_read(event::scheduler& s, char* buffer, std::size_t count);
+  coro::task<std::size_t> async_write(event::scheduler& s, char const* buffer, std::size_t count);
 
+  std::string getLocalName() const;
+  std::string getRemoteName() const;
+
+private:
+  Socket(int fd, TLSContext&& tls);
+
+private:
+  int mSocket;
+  TLSContext mTls;
 }; // Socket
 
 ////////////////////////////////////////////////////////////////////////////////

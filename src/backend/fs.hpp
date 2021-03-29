@@ -6,18 +6,20 @@
 ////////////////////////////////////////////////////////////////////////////////
 
 #include <map>
+#include <filesystem>
 #include "http.hpp"
 
 namespace fs {
 
 class resource final : public http::content {
 public:
-  resource(std::string const& location,
-           std::vector<char>&& data);
+  resource(std::string const& root, std::string const& location);
   resource(resource const&) = delete;
   resource(resource&&) = delete;
   resource& operator = (resource const&) = delete;
   resource& operator = (resource&&) = delete;
+
+  void reload();
   
   // http::content
   virtual std::size_t size() const override {
@@ -34,8 +36,10 @@ public:
   }
 private:
   http::content::mime_type mType = http::content::mime_type::TEXT;
+  std::string mRoot;
   std::string mLocation;
   std::vector<char> mData;
+  std::filesystem::file_time_type mTime;
 };
 
 class cache final {
@@ -49,12 +53,16 @@ public:
   cache& operator = (cache&&) = delete;
 
   resource const*
-  find(std::string const& name) const {
+  find(std::string const& name, bool may_reload = false) const {
     auto it = mEntries.find(name);
     if (it == mEntries.end()) {
       return nullptr;
     }
-    return it->second.get();
+    auto r = it->second.get();
+    if (may_reload) {
+      r->reload();
+    }
+    return r;
   }
   cache_entries const& entries() const {
     return mEntries;

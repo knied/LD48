@@ -54,21 +54,33 @@ mimeTypeFromFileName(std::string const& fileName) {
   return http::content::mime_type::TEXT;
 }
 
-resource::resource(std::string const& location,
-                   std::vector<char>&& data)
+auto timestampOf(std::string const& fileName) {
+  std::filesystem::path p = std::filesystem::current_path() / fileName;
+  return std::filesystem::last_write_time(p);
+}
+
+resource::resource(std::string const& root, std::string const& location)
   : mType(mimeTypeFromFileName(location))
+  , mRoot(root)
   , mLocation(location)
-  , mData(std::move(data)) {}
+  , mData(readFile(mRoot + mLocation))
+  , mTime(timestampOf(mRoot + mLocation)) {}
+
+void resource::reload() {
+  auto time = timestampOf(mRoot + mLocation);
+  if (time != mTime) {
+    std::cout << "File '" << mRoot << mLocation << "' changed on disk. Refreshing..." << std::endl;
+    mData = readFile(mRoot + mLocation);
+    mTime = time;
+  }
+}
 
 cache::cache(std::string const& root) {
   auto names = readWhitelist(root + "/whitelist.ini");
   for (auto name : names) {
     auto location = "/" + name;
-    auto fileName = root + "/" + name;
-    mEntries.insert(
-      std::make_pair(
-        location, std::make_unique<resource>(
-          location, readFile(fileName))));
+    auto fileName = root + location;
+    mEntries.insert(std::make_pair(location, std::make_unique<resource>(root, location)));
   }
 }
 

@@ -93,7 +93,7 @@ httpServer(event::scheduler& s,
           if (uri == "/") {
             uri = "/index.html";
           }
-          auto content = files.find(uri);
+          auto content = files.find(uri, true);
           if (content) {
             response.set_status_code(http::response::status_code::OK);
             response.set_content(content);

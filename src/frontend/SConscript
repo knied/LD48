@@ -37,6 +37,6 @@ wasm = frontend_env.Wasm('add.wasm', wasm_sources)
 
 static_sources = ['main.js', 'main.css'] + wasm
 generated = frontend_env.Frontend('whitelist.ini', static_sources)
-frontend = Install(frontend_env['PREFIX'] + '/web', generated)
+frontend = Install(frontend_env['PREFIX'] + '/web', generated + static_sources)
 
 Return('frontend')

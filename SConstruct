@@ -26,6 +26,9 @@ if GetOption('run'):
         Exit(1)
     env['SERVER_CERT'] = os.environ['SERVER_CERT']
     env['SERVER_KEY'] = os.environ['SERVER_KEY']
+else:
+    env['SERVER_CERT'] = ''
+    env['SERVER_KEY'] = ''
 
 env.Append(CXXFLAGS = ['-std=c++2a', '-fcoroutines-ts',
                        '-Wall', '-Wextra', '-Wc++2a-compat', '-Werror'],

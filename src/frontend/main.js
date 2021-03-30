@@ -141,38 +141,48 @@ function applyUniforms(gl, binding, view) {
         const location = slot[2];
         switch (type) {
         case UNIFORM_VF1:
-            gl.uniform1fv(location, new Float32Array(view.buffer, view.byteOffset + offset, 1));
+            gl.uniform1fv(location, new Float32Array(
+                view.buffer, view.byteOffset + offset, 1));
             break;
         case UNIFORM_VF2:
-            gl.uniform2fv(location, new Float32Array(view.buffer, view.byteOffset + offset, 2));
+            gl.uniform2fv(location, new Float32Array(
+                view.buffer, view.byteOffset + offset, 2));
             break;
         case UNIFORM_VF3:
-            gl.uniform3fv(location, new Float32Array(view.buffer, view.byteOffset + offset, 3));
+            gl.uniform3fv(location, new Float32Array(
+                view.buffer, view.byteOffset + offset, 3));
             break;
         case UNIFORM_VF4:
-            gl.uniform4fv(location, new Float32Array(view.buffer, view.byteOffset + offset, 4));
+            gl.uniform4fv(location, new Float32Array(
+                view.buffer, view.byteOffset + offset, 4));
             break;
         case UNIFORM_VI1:
-            gl.uniform1iv(location, new Int32Array(view.buffer, view.byteOffset + offset, 1));
+            gl.uniform1iv(location, new Int32Array(
+                view.buffer, view.byteOffset + offset, 1));
             break;
         case UNIFORM_VI2:
-            gl.uniform2iv(location, new Int32Array(view.buffer, view.byteOffset + offset, 2));
+            gl.uniform2iv(location, new Int32Array(
+                view.buffer, view.byteOffset + offset, 2));
             break;
         case UNIFORM_VI3:
-            gl.uniform3iv(location, new Int32Array(view.buffer, view.byteOffset + offset, 3));
+            gl.uniform3iv(location, new Int32Array(
+                view.buffer, view.byteOffset + offset, 3));
             break;
         case UNIFORM_VI4:
-            gl.uniform4iv(location, new Int32Array(view.buffer, view.byteOffset + offset, 4));
+            gl.uniform4iv(location, new Int32Array(
+                view.buffer, view.byteOffset + offset, 4));
             break;
         case UNIFORM_MF2:
-            gl.uniformMatrix2fv(location, false, new Float32Array(view.buffer, view.byteOffset + offset, 4));
+            gl.uniformMatrix2fv(location, false, new Float32Array(
+                view.buffer, view.byteOffset + offset, 4));
             break;
         case UNIFORM_MF3:
-            gl.uniformMatrix3fv(location, false, new Float32Array(view.buffer, view.byteOffset + offset, 9));
+            gl.uniformMatrix3fv(location, false, new Float32Array(
+                view.buffer, view.byteOffset + offset, 9));
             break;
         case UNIFORM_MF4:
-            const v = new Float32Array(view.buffer, view.byteOffset + offset, 16);
-            gl.uniformMatrix4fv(location, false, v);
+            gl.uniformMatrix4fv(location, false, new Float32Array(
+                view.buffer, view.byteOffset + offset, 16));
             break;
         }
     }
@@ -286,9 +296,47 @@ function RefHeap(size) {
     }
 }
 
+function InputBuffer(wasm, heap, canvas) {
+    this.movementX = 0;
+    this.movementY = 0;
+    this.clientX = 0;
+    this.clientY = 0;
+    this.ptr = undefined;
+    canvas.addEventListener('mousemove', function(e) {
+        this.movementX += e.movementX;
+        this.movementY += e.movementY;
+        this.clientX = e.clientX;
+        this.clientY = e.clientY;
+    });
+    canvas.addEventListener('mousedown', function(e) {
+        console.log('mousedown', e);
+        /*canvas.requestPointerLock = canvas.requestPointerLock;
+        canvas.requestPointerLock();*/
+    });
+    document.addEventListener('keydown', function(e) {
+        console.log('keydown', e);
+    });
+    document.addEventListener('keyup', function(e) {
+        console.log('keyup', e);
+    });
+    this.swap = function() {
+        if (this.ptr !== undefined) {
+            wasm.exports.free(this.ptr);
+        }
+        const size = 16;
+        this.ptr = wasm.exports.malloc(size);
+        const view = new DataView(heap.buffer, this.ptr, size);
+        view.setUint32(0, this.movementX, true);
+        view.setUint32(4, this.movementY, true);
+        view.setUint32(8, this.clientX, true);
+        view.setUint32(16, this.clientY, true);
+    };
+}
+
 let game = null;
 function main(refHeap, wasm, heap) {
-    var canvas = document.body.appendChild(document.createElement('canvas'));
+    const canvas = document.body.appendChild(document.createElement('canvas'));
+    const inputBuffer = new InputBuffer(wasm, heap, canvas);
     gl = canvas.getContext('webgl2', {antialias: false, powerPreference: 'high-performance'});
     if (!gl) {
         throw 'WebGL2 is not supported by your browser :(';
@@ -306,7 +354,6 @@ function main(refHeap, wasm, heap) {
             }
         }*/
     }
-    //game = new Game(gl);
     const ctx = refHeap.put(gl);
     const udata = wasm.exports.init(ctx);
     let prevTime;
@@ -321,9 +368,6 @@ function main(refHeap, wasm, heap) {
             }
             const dt = prevTime !== undefined ? (now - prevTime) / 1000.0 : 0.0;
             prevTime = now;
-            //gl.viewport(0, 0, gl.drawingBufferWidth, gl.drawingBufferHeight);
-            //gl.clearColor(0,0,0,1);
-            //gl.clear(gl.COLOR_BUFFER_BIT);
             const result = wasm.exports.render(udata, dt,
                                                gl.drawingBufferWidth,
                                                gl.drawingBufferHeight);

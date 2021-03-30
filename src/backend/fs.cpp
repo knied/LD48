@@ -32,6 +32,8 @@ readFile(std::string const& fileName) {
     file.seekg(0, std::ios::beg);
     result.resize(size);
     file.read(result.data(), size);
+  } else {
+    throw std::runtime_error("File not found");
   }
   return result;
 }
@@ -80,7 +82,12 @@ cache::cache(std::string const& root) {
   for (auto name : names) {
     auto location = "/" + name;
     auto fileName = root + location;
-    mEntries.insert(std::make_pair(location, std::make_unique<resource>(root, location)));
+    try {
+      mEntries.insert(
+        std::make_pair(location, std::make_unique<resource>(root, location)));
+    } catch (std::runtime_error& err) {
+      std::cerr << "Unable to cache file: " << name << std::endl;
+    }
   }
 }
 

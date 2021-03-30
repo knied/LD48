@@ -20,16 +20,7 @@ TEST(fs, cache_valid_whitelist_missing_files) {
   }
   
   fs::cache c(".");
-  EXPECT_EQ(c.entries().size(), 2ull);
-
-  std::set<std::string> expectedKeys {
-    "/bla.txt", "/blub.html"
-  };
-  auto expectedKey = expectedKeys.begin();
-  for (auto& e : c.entries()) {
-    EXPECT_EQ(e.first, *(expectedKey++));
-    EXPECT_EQ(e.second->size(), 0ull);
-  }
+  EXPECT_EQ(c.entries().size(), 0ull);
 }
 
 TEST(fs, cache_valid_whitelist_valid_files) {

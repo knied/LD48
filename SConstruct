@@ -11,8 +11,15 @@ AddOption('--prefix', dest='prefix', action='store', default='#/install', help="
 AddOption('--run', dest='run', action='store_true', default=False, help="run programs")
 
 env = Environment(tools = ['default', 'clang', 'clangxx'])
-if 'PATH_TO_LLVM' in os.environ:
-    env.PrependENVPath('PATH', os.environ['PATH_TO_LLVM'])
+if not 'HOMEBREW_PREFIX' in os.environ:
+    print("Error: HOMEBREW_PREFIX needs to point to your Homebrew prefix. Typically '/usr/local' or '/opt/homebrew'")
+    Exit(1)
+homebrew_prefix = os.environ['HOMEBREW_PREFIX']
+llvm = os.path.join(homebrew_prefix, 'opt/llvm')
+libev = os.path.join(homebrew_prefix, 'opt/libev')
+libressl = os.path.join(homebrew_prefix, 'opt/libressl')
+
+env.PrependENVPath('PATH', os.path.join(llvm, 'bin'))
 if not 'WASI_SYSROOT' in os.environ:
     print("Error: WASI_SYSROOT needs to point to a precompiled wasi sysroot")
     Exit(1)
@@ -32,8 +39,8 @@ else:
 
 env.Append(CXXFLAGS = ['-std=c++2a', '-fcoroutines-ts',
                        '-Wall', '-Wextra', '-Wc++2a-compat', '-Werror'],
-           LIBPATH = ['/usr/local/opt/libev/lib', '/usr/local/opt/libressl/lib'],
-           CPPPATH = ['/usr/local/opt/libev/include', '/usr/local/opt/libressl/include'])
+           LIBPATH = [os.path.join(libev, 'lib'), os.path.join(libressl, 'lib')],
+           CPPPATH = [os.path.join(libev, 'include'), os.path.join(libressl, 'include')])
 
 if GetOption('debug'):
     env.Append(CXXFLAGS = ['-g'])

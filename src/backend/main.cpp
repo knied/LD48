@@ -146,7 +146,7 @@ httpServer(event::scheduler& s,
       while (sent < toSend) {
         auto bytes = co_await client.async_write(s, buffer.data() + sent, toSend - sent);
         if (bytes == 0) {
-          std::cout << dateAndTime() << " - closed: " << client << std::endl;
+          std::cout << dateAndTime() << " - closed (write): " << client << std::endl;
           co_return;
         }
         sent += bytes;
@@ -165,7 +165,7 @@ httpServer(event::scheduler& s,
         co_await websocket::async_send_close(channel);
       }
   }
-  std::cout << dateAndTime() << " - closed: " << client << std::endl;
+  std::cout << dateAndTime() << " - closed (end): " << client << std::endl;
 }
 
 coro::sync_task<void>

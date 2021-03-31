@@ -193,7 +193,8 @@ request::stream(coro::async_generator<char>& chars) {
     //std::cout << "request_line: " << request_line << std::endl;
     request req;
     if (!parseRequestLine(request_line, req)) {
-      std::cout << "Malformed request-line" << std::endl;
+      std::cout << "Malformed request-line:" << std::endl;
+      std::cout << request_line << std::endl;
       co_return;
     }
 
@@ -204,6 +205,7 @@ request::stream(coro::async_generator<char>& chars) {
       if ((line.size() == 0 || !isWhitespace(line[0])) && multiLine.size()) {
         if (!parseMessageHeader(multiLine, req)) {
           std::cout << "Malformed message-header" << std::endl;
+          std::cout << multiLine << std::endl;
           co_return;
         }
         multiLine.clear();

@@ -264,7 +264,7 @@ coro::task<std::size_t> Socket::async_write(event::scheduler& s, char const* buf
 }
 
 std::string Socket::getLocalName() const {
-  std::string local = "<nobody>";
+  std::string local = "<void>";
   sockaddr_storage address;
   socklen_t addressLength = sizeof(address);
   if (getsockname(mSocket, reinterpret_cast<sockaddr*>(&address),
@@ -277,7 +277,7 @@ std::string Socket::getLocalName() const {
 }
 
 std::string Socket::getRemoteName() const {
-  std::string remote = "<nobody>";
+  std::string remote = "<void>";
   sockaddr_storage address;
   socklen_t addressLength = sizeof(address);
   if (getpeername(mSocket, reinterpret_cast<sockaddr*>(&address),

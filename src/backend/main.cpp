@@ -6,42 +6,16 @@
 
 #include <vector>
 #include <iostream>
+#include <sstream>
 
-auto createListeners(char const* host, char const* port, TLSConfig const& tlsConfig) {
-  std::vector<std::unique_ptr<Socket>> listeners;
-
-  {
-    // First try to bind to IPv6
-    AddressOptions options(IPv6, TCP, host, port);
-    for (auto& info : options) {
-      std::cout << "Try to listen on " << info << std::endl;
-      try {
-        listeners.push_back(std::make_unique<Socket>(info, 10, tlsConfig));
-      } catch (std::runtime_error& ex) {
-        std::cout << "  Error: " << ex.what() << std::endl;
-      }
-    }
-  }
-
-  {
-    // In case of no dual-stack: Try to manyally bind to IPv4
-    AddressOptions options(IPv4, TCP, host, port);
-    for (auto& info : options) {
-      std::cout << "Try to listen on " << info << std::endl;
-      try {
-        listeners.push_back(std::make_unique<Socket>(info, 10, tlsConfig));
-      } catch (std::runtime_error& ex) {
-        std::cout << "  Skipping: " << ex.what() << std::endl;
-      }
-    }
-  }
-
-  std::cout << "Listening on:" << std::endl;
-  for (auto& listener : listeners) {
-    std::cout << "  " << *listener << std::endl;
-  }
-
-  return listeners;
+static std::string
+dateAndTime() {
+  // NOTE: Not thread safe!
+  auto now = std::chrono::system_clock::now();
+  auto time = std::chrono::system_clock::to_time_t(now);
+  std::stringstream ss;
+  ss << std::put_time(std::localtime(&time), "%Y-%m-%d %X");
+  return ss.str();
 }
 
 enum class ConnectionStatus {
@@ -158,7 +132,7 @@ httpServer(event::scheduler& s,
       http::response response;
       status = generateResponse(request, files, response);
       if (status != ConnectionStatus::Ok) {
-        std::cout << "Noteworthy HTTP Request:" << std::endl;
+        std::cout << dateAndTime() << " - Noteworthy HTTP Request:" << std::endl;
         std::cout << ">>>>" << std::endl;
         std::cout << request;
         std::cout << "====" << std::endl;
@@ -172,7 +146,7 @@ httpServer(event::scheduler& s,
       while (sent < toSend) {
         auto bytes = co_await client.async_write(s, buffer.data() + sent, toSend - sent);
         if (bytes == 0) {
-          std::cout << "closed: " << client << std::endl;
+          std::cout << dateAndTime() << " - closed: " << client << std::endl;
           co_return;
         }
         sent += bytes;
@@ -182,7 +156,7 @@ httpServer(event::scheduler& s,
       }
     }
   if (status == ConnectionStatus::Upgrade) {
-    std::cout << "upgrade: " << client << std::endl;
+    std::cout << dateAndTime() << " - upgrade: " << client << std::endl;
     for co_await (auto frame : websocket::stream(channel)) {
         std::string msg(frame.data.begin(), frame.data.end());
         if (!co_await websocket::async_send_text(channel, "Hey there!")) {
@@ -191,7 +165,7 @@ httpServer(event::scheduler& s,
         co_await websocket::async_send_close(channel);
       }
   }
-  std::cout << "closed: " << client << std::endl;
+  std::cout << dateAndTime() << " - closed: " << client << std::endl;
 }
 
 coro::sync_task<void>
@@ -200,17 +174,18 @@ acceptLoop(event::scheduler& s,
            fs::cache const& files) {
   std::vector<coro::sync_task<void>> connections;
   while (true) {
-    std::cout << "accepting..." << std::endl;
+    //std::cout << "accepting..." << std::endl;
     auto client = co_await listener.async_accept(s);
     if (!client) {
-      std::cout << "accept failed" << std::endl;
+      std::cout << dateAndTime() << " - accept failed" << std::endl;
       continue;
     }
-    std::cout << "accepted: " << client << std::endl;
+    std::size_t garbage = 0;
     connections.erase(
       std::remove_if(connections.begin(), connections.end(),
-                     [](auto const& c) {
+                     [&garbage](auto const& c) {
                        if (c.done()) {
+                         garbage++;
                          try {
                            c.result();
                          } catch (std::runtime_error const& e) {
@@ -220,13 +195,53 @@ acceptLoop(event::scheduler& s,
                        return c.done();
                      }),
       connections.end());
+    std::stringstream ss;
+    ss << client;
     connections.push_back(httpServer(s, std::move(client), files));
-    std::cout << "connections: " << connections.size() << std::endl;
+    std::cout << dateAndTime() << " - accepted: " << ss.str() << " #connections = " << connections.size() << " #garbage = " << garbage << std::endl;
     connections.back().start();
   }
 }
 
+auto createListeners(char const* host, char const* port, TLSConfig const& tlsConfig) {
+  std::vector<std::unique_ptr<Socket>> listeners;
+
+  {
+    // First try to bind to IPv6
+    AddressOptions options(IPv6, TCP, host, port);
+    for (auto& info : options) {
+      std::cout << "Try to listen on " << info << std::endl;
+      try {
+        auto l = std::make_unique<Socket>(info, 10, tlsConfig);
+        std::cout << "  Listening: " << *l << std::endl;
+        listeners.push_back(std::move(l));
+        
+      } catch (std::runtime_error& ex) {
+        std::cout << "  Skipping: " << ex.what() << std::endl;
+      }
+    }
+  }
+
+  {
+    // In case of no dual-stack: Try to manyally bind to IPv4
+    AddressOptions options(IPv4, TCP, host, port);
+    for (auto& info : options) {
+      std::cout << "Try to listen on " << info << std::endl;
+      try {
+        auto l = std::make_unique<Socket>(info, 10, tlsConfig);
+        std::cout << "  Listening: " << *l << std::endl;
+        listeners.push_back(std::move(l));
+      } catch (std::runtime_error& ex) {
+        std::cout << "  Skipping: " << ex.what() << std::endl;
+      }
+    }
+  }
+
+  return listeners;
+}
+
 int main(int argc, char const* argv[]) {
+  std::cout << dateAndTime() << " - Launching Server" << std::endl;
   for (int i = 0; i < argc; ++i) {
     std::cout << "argv[" << i << "] = \"" << argv[i] << "\"" << std::endl;
   }

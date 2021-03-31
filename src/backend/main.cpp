@@ -160,6 +160,7 @@ httpServer(event::scheduler& s,
       }
     }
   if (status == ConnectionStatus::Upgrade) {
+#if 0
     std::cout << dateAndTime() << " - upgrade: " << client << std::endl;
     for co_await (auto frame : websocket::stream(channel)) {
         std::string msg(frame.data.begin(), frame.data.end());
@@ -168,6 +169,9 @@ httpServer(event::scheduler& s,
         }
         co_await websocket::async_send_close(channel);
       }
+#else
+    throw std::runtime_error("error: Ignoring attempt to upgrade");
+#endif
   }
   } catch (std::runtime_error& err) {
     std::cout << dateAndTime() << " - Fatal Client Error:" << std::endl;

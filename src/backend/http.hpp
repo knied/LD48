@@ -5,7 +5,7 @@
 
 ////////////////////////////////////////////////////////////////////////////////
 
-#include "com.hpp"
+#include "coro.hpp"
 #include <string>
 #include <vector>
 #include <map>
@@ -75,11 +75,6 @@ public:
       }
     co_return request();
   }
-  /*template<typename async_ctx, typename async_io_if>
-  static coro::async_generator<http::request>
-  stream(com::channel<async_ctx, async_io_if>& channel) {
-    return request::stream(channel.async_char_stream());
-    }*/
   
 private:
   method mMethod = method::GET;
@@ -141,6 +136,13 @@ public:
   }
 
   std::vector<char> serialize() const;
+
+  template<typename channel>
+  static coro::task<bool>
+  async_write(channel& c, response const& r) {
+    auto buffer = r.serialize();
+    co_return co_await c.async_write(buffer.data(), buffer.size());
+  }
 
 private:
   status_code mStatusCode = status_code::OK;

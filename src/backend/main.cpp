@@ -137,7 +137,7 @@ generateResponse(http::request const& request,
   }
 }
 
-using tls_channel = com::channel<event::scheduler, net::tls_socket>;
+using secure_channel = com::channel<event::scheduler, net::tls_socket>;
 static coro::sync_task<void>
 httpsServer(event::scheduler& s,
             net::tls_socket client,
@@ -149,7 +149,7 @@ httpsServer(event::scheduler& s,
     clientName = ss.str();
   }
   
-  tls_channel channel(s, client);
+  secure_channel channel(s, client);
   auto chars = channel.async_char_stream();
   ConnectionStatus status = ConnectionStatus::Ok;
   try {
@@ -165,17 +165,11 @@ httpsServer(event::scheduler& s,
         std::cout << response;
         std::cout << "<<<<" << std::endl;
       }
-      
-      auto buffer = response.serialize();
-      std::size_t sent = 0;
-      auto toSend = buffer.size();
-      while (sent < toSend) {
-        auto bytes = co_await client.async_write(s, buffer.data() + sent, toSend - sent);
-        if (bytes == 0) {
-          std::cout << dateAndTime() << " - closed (write): " << clientName << std::endl;
-          co_return;
-        }
-        sent += bytes;
+
+      if (!co_await http::response::async_write(channel, response)) {
+        std::cout << dateAndTime()
+                  << " - closed (write): " << clientName << std::endl;
+        co_return;
       }
       if (status != ConnectionStatus::Ok) {
         break;
@@ -203,7 +197,7 @@ httpsServer(event::scheduler& s,
   std::cout << dateAndTime() << " - closed (end): " << clientName << std::endl;
 }
 
-using channel = com::channel<event::scheduler, net::socket>;
+using open_channel = com::channel<event::scheduler, net::socket>;
 static coro::sync_task<void>
 httpToHttpsForwarder(event::scheduler& s,
                      net::socket client) {
@@ -214,8 +208,8 @@ httpToHttpsForwarder(event::scheduler& s,
     clientName = ss.str();
   }
   
-  channel cnl(s, client);
-  auto chars = cnl.async_char_stream();
+  open_channel channel(s, client);
+  auto chars = channel.async_char_stream();
   try {
     auto request = co_await http::request::async_read(chars);
     std::string host;
@@ -240,18 +234,11 @@ httpToHttpsForwarder(event::scheduler& s,
     std::cout << "====" << std::endl;
     std::cout << response;
     std::cout << "<<<<" << std::endl;
-    
-    auto buffer = response.serialize();
-    std::size_t sent = 0;
-    auto toSend = buffer.size();
-    while (sent < toSend) {
-      auto bytes = co_await client.async_write(s, buffer.data() + sent, toSend - sent);
-      if (bytes == 0) {
-        std::cout << dateAndTime() << " - closed (write): " << clientName << std::endl;
-        client.close();
-        co_return;
-      }
-      sent += bytes;
+
+    if (!co_await http::response::async_write(channel, response)) {
+      std::cout << dateAndTime()
+                << " - closed (write): " << clientName << std::endl;
+      co_return;
     }
   } catch (std::runtime_error& err) {
     std::cout << dateAndTime() << " - Fatal Client Error:" << std::endl;

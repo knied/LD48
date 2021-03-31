@@ -89,8 +89,8 @@ public:
   coro::task<std::size_t>
   async_write(event::scheduler& s, void const* buffer, size_t count);
 
-  std::string getLocalName() const;
-  std::string getRemoteName() const;
+  std::string local_name() const;
+  std::string remote_name() const;
 
 protected:
   socket(int fd);

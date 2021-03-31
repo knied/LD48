@@ -1,6 +1,6 @@
 Import('env')
 
-backend_sources = ['Socket.cpp', 'http.cpp', 'fs.cpp']
+backend_sources = ['net.cpp', 'http.cpp', 'fs.cpp']
 
 backend_env = env.Clone()
 backend_env.Append(LIBS = ['ev', 'tls'])

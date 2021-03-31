@@ -1,6 +1,6 @@
 ////////////////////////////////////////////////////////////////////////////////
 
-#include "Socket.hpp"
+#include "net.hpp"
 
 #include <unistd.h>
 #include <sys/types.h>
@@ -273,7 +273,7 @@ socket::async_write(event::scheduler& s, void const* buffer, size_t count) {
   co_return 0;
 }
 
-std::string socket::getLocalName() const {
+std::string socket::local_name() const {
   std::string local = "<void>";
   sockaddr_storage address;
   socklen_t addressLength = sizeof(address);
@@ -286,7 +286,7 @@ std::string socket::getLocalName() const {
   return local;
 }
 
-std::string socket::getRemoteName() const {
+std::string socket::remote_name() const {
   std::string remote = "<void>";
   sockaddr_storage address;
   socklen_t addressLength = sizeof(address);
@@ -372,12 +372,12 @@ std::ostream& operator << (std::ostream& stream, net::address_info const& info) 
 }
 
 std::ostream& operator << (std::ostream& stream, net::socket const& socket) {
-  stream << socket.getLocalName() << " <-> " << socket.getRemoteName();
+  stream << socket.local_name() << " <-> " << socket.remote_name();
   return stream;
 }
 
 std::ostream& operator << (std::ostream& stream, net::tls_socket const& socket) {
-  stream << socket.getLocalName() << " <-TLS-> " << socket.getRemoteName();
+  stream << socket.local_name() << " <-TLS-> " << socket.remote_name();
   return stream;
 }
 

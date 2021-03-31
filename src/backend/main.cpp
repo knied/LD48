@@ -337,7 +337,7 @@ auto createListeners(char const* host, char const* port, crypto::config const& t
   }
 
   {
-    // In case of no dual-stack: Try to manyally bind to IPv4
+    // In case of no dual-stack: Try to manually bind to IPv4
     net::address_options options(net::IPv4, net::TCP, host, port);
     for (auto& info : options) {
       std::cout << "Try to listen on " << info << std::endl;
@@ -374,7 +374,7 @@ auto createListeners(char const* host, char const* port) {
   }
 
   {
-    // In case of no dual-stack: Try to manyally bind to IPv4
+    // In case of no dual-stack: Try to manually bind to IPv4
     net::address_options options(net::IPv4, net::TCP, host, port);
     for (auto& info : options) {
       std::cout << "Try to listen on " << info << std::endl;

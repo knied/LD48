@@ -68,18 +68,19 @@ public:
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class socket final {
+class socket {
 public:
   socket();
   socket(address_info const& info, int maxQueue);
   socket(socket&& nbs);
   socket(socket const&) = delete;
-  socket& operator = (socket const&) = delete;
-  ~socket();
-  
   socket& operator = (socket&& nbs);
+  socket& operator = (socket const&) = delete;
+  virtual ~socket();
+
   operator bool() const;
   void close();
+  int fd() const { return mSocket; }
 
   coro::task<socket>
   async_accept(event::scheduler& s);
@@ -98,18 +99,15 @@ private:
   int mSocket;
 }; // socket
 
-class tls_socket final {
+class tls_socket final : public socket {
 public:
-  tls_socket();
-  tls_socket(address_info const& info, int maxQueue, crypto::config const& tlsConfig);
+  tls_socket(address_info const& info, int maxQueue,
+             crypto::config const& tlsConfig);
   tls_socket(tls_socket&& nbs);
   tls_socket(tls_socket const&) = delete;
-  tls_socket& operator = (tls_socket const&) = delete;
-  ~tls_socket();
-  
   tls_socket& operator = (tls_socket&& nbs);
-  operator bool() const;
-  void close();
+  tls_socket& operator = (tls_socket const&) = delete;
+  ~tls_socket() = default;
 
   coro::task<tls_socket>
   async_accept(event::scheduler& s);
@@ -118,14 +116,10 @@ public:
   coro::task<std::size_t>
   async_write(event::scheduler& s, char const* buffer, std::size_t count);
 
-  std::string getLocalName() const;
-  std::string getRemoteName() const;
+private:
+  tls_socket(socket&& other, crypto::context&& tls);
 
 private:
-  tls_socket(int fd, crypto::context&& tls);
-
-private:
-  int mSocket;
   crypto::context mTls;
 }; // tls_socket
 

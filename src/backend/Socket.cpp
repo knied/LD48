@@ -301,95 +301,36 @@ std::string socket::getRemoteName() const {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-tls_socket::tls_socket()
-  : mSocket(-1) {}
+tls_socket::tls_socket(socket&& other, crypto::context&& tls)
+  : socket(std::move(other)), mTls(std::move(tls)) {}
 
-tls_socket::tls_socket(int fd, crypto::context&& tls)
-  : mSocket(fd < 0 ? -1 : fd), mTls(std::move(tls)) {}
+tls_socket::tls_socket(address_info const& info, int maxQueue,
+                       crypto::config const& tlsConfig)
+  : socket(info, maxQueue), mTls(tlsConfig) {}
 
-tls_socket::tls_socket(address_info const& info, int maxQueue, crypto::config const& tlsConfig)
-  : mSocket(-1), mTls(tlsConfig) {
-  mSocket = ::socket(info.ai_family, info.ai_socktype, 0);
-  if (mSocket < 0) {
-    mSocket = -1;
-    throw std::runtime_error("error: socket() failed");
-  }
-  if (!makeNonBlocking(mSocket)) {
-    close();
-    throw std::runtime_error("error: makeNonBlocking() failed");
-  }
-  int on = 1;
-  if (setsockopt(mSocket, SOL_SOCKET, SO_REUSEADDR, (char *)&on, sizeof(on))) {
-    close();
-    throw std::runtime_error("error: setsockopt() failed");
-  }
-  if (::bind(mSocket, info.ai_addr, info.ai_addrlen)) {
-    close();
-    throw std::runtime_error("error: bind() failed");
-  }
-  int status = ::listen(mSocket, maxQueue);
-  if (status < 0) {
-    close();
-    throw std::runtime_error("error: listen() failed");
-  }
-}
-
-tls_socket::tls_socket(tls_socket&& nbs)
-  : mSocket(nbs.mSocket)
-  , mTls(std::move(nbs.mTls)) {
-  nbs.mSocket = -1;
-}
-
-tls_socket::~tls_socket() {
-  close();
-  mSocket = -2;
-}
+tls_socket::tls_socket(tls_socket&& other)
+  : socket(std::move(other))
+  , mTls(std::move(other.mTls)) {}
 
 tls_socket&
-tls_socket::operator = (tls_socket&& nbs) {
-  close();
-  std::swap(mSocket, nbs.mSocket);
-  std::swap(mTls, nbs.mTls);
-  return *this;
-}
-
-tls_socket::operator bool() const {
-  return mSocket >= 0;
-}
-
-void tls_socket::close() {
-  if (mSocket >= 0) {
-    ::close(mSocket);
+tls_socket::operator = (tls_socket&& other) {
+  if (std::addressof(other) != this) {
+    socket::operator = (std::move(other));
+    std::swap(mTls, other.mTls);
   }
-  mSocket = -1;
+  return *this;
 }
 
 coro::task<tls_socket>
 tls_socket::async_accept(event::scheduler& s) {
-  sockaddr_storage clientAddress;
-  socklen_t clientAddressLength = sizeof(clientAddress);
-  int client;
-  do {
-    client = co_await ::async_accept(s, mSocket, mSocket,
-                                     (sockaddr*)&clientAddress,
-                                     &clientAddressLength);
-  } while (client == -1 && errno == EINTR);
-  if (client == -1) {
-    co_return tls_socket();
-  }
-  
-  if (!makeNonBlocking(client)) {
-    ::close(client);
-    co_return tls_socket();
-  }
-
-  auto context = mTls.accept(client);
-  co_return tls_socket(client, std::move(context));
+  auto client = co_await socket::async_accept(s);
+  auto context = mTls.accept(client.fd());
+  co_return tls_socket(std::move(client), std::move(context));
 }
 
 coro::task<std::size_t>
 tls_socket::async_read(event::scheduler& s, char* buffer, std::size_t count) {
-  auto result = co_await async_tls_read(s, mSocket, mTls.get_context(), buffer, count);
+  auto result = co_await async_tls_read(s, fd(), mTls.get_context(), buffer, count);
   if (result >= 0) {
     co_return result;
   }
@@ -405,7 +346,7 @@ tls_socket::async_read(event::scheduler& s, char* buffer, std::size_t count) {
 
 coro::task<std::size_t>
 tls_socket::async_write(event::scheduler& s, char const* buffer, std::size_t count) {
-  auto result = co_await async_tls_write(s, mSocket, mTls.get_context(), buffer, count);
+  auto result = co_await async_tls_write(s, fd(), mTls.get_context(), buffer, count);
   if (result >= 0) {
     co_return result;
   }
@@ -417,32 +358,6 @@ tls_socket::async_write(event::scheduler& s, char const* buffer, std::size_t cou
   }
   throw std::runtime_error(ss.str());
   co_return 0;
-}
-
-std::string tls_socket::getLocalName() const {
-  std::string local = "<void>";
-  sockaddr_storage address;
-  socklen_t addressLength = sizeof(address);
-  if (getsockname(mSocket, reinterpret_cast<sockaddr*>(&address),
-                  &addressLength) == 0) {
-    assert(addressLength <= sizeof(address));
-    local = addressToString(reinterpret_cast<sockaddr*>(&address),
-                            addressLength);
-  }
-  return local;
-}
-
-std::string tls_socket::getRemoteName() const {
-  std::string remote = "<void>";
-  sockaddr_storage address;
-  socklen_t addressLength = sizeof(address);
-  if (getpeername(mSocket, reinterpret_cast<sockaddr*>(&address),
-                  &addressLength) == 0) {
-    assert(addressLength <= sizeof(address));
-    remote = addressToString(reinterpret_cast<sockaddr*>(&address),
-                             addressLength);
-  }
-  return remote;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

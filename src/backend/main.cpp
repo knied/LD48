@@ -44,18 +44,38 @@ auto createListeners(char const* host, char const* port, TLSConfig const& tlsCon
   return listeners;
 }
 
-static bool
-websocketHandshake(http::request::headers const& headers,
-                   http::response& response) {
+enum class ConnectionStatus {
+  Ok, OkClose, Error, Upgrade
+};
+
+static ConnectionStatus
+generateHttpErrorResponse(http::response::status_code code,
+                          fs::cache const& files,
+                          http::response& response) {
+  response.set_status_code(code);
+  response.get_headers().insert(std::make_pair("Connection", "close"));
+  std::string url = "/" + std::to_string((int)code) + ".html";
+  auto error = files.find(url, true);
+  if (error) {
+    response.set_content(error);
+  }
+  return ConnectionStatus::Error;
+}
+
+static ConnectionStatus
+generateWebsocketHandshake(http::request const& request,
+                           fs::cache const& files,
+                           http::response& response) {
+  auto& headers = request.get_headers();
   auto key = headers.find("Sec-WebSocket-Key");
   auto version = headers.find("Sec-WebSocket-Version");
   if (key == headers.end() || version == headers.end()) {
-    response.set_status_code(http::response::status_code::BAD_REQUEST);
-    return false;
+    return generateHttpErrorResponse(
+      http::response::status_code::BAD_REQUEST, files, response);
   }
   if (version->second != "13") {
-    response.set_status_code(http::response::status_code::BAD_REQUEST);
-    return false;
+    return generateHttpErrorResponse(
+      http::response::status_code::BAD_REQUEST, files, response);
   }
   std::string magicString = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
   utils::SHA1 acceptHash = utils::sha1(key->second + magicString);
@@ -64,7 +84,66 @@ websocketHandshake(http::request::headers const& headers,
   response.get_headers().insert(std::make_pair("Upgrade", "websocket"));
   response.get_headers().insert(std::make_pair("Connection", "Upgrade"));
   response.get_headers().insert(std::make_pair("Sec-WebSocket-Accept", acceptHash64));
-  return true;
+  return ConnectionStatus::Ok;
+}
+
+static bool
+wantsToClose(http::request const& request) {
+  auto& headers = request.get_headers();
+  auto h = headers.find("Connection");
+  return h != headers.end() && h->second == "close";
+}
+
+static bool
+wantsToUpgrade(http::request const& request, std::string& protocol) {
+  auto& headers = request.get_headers();
+  auto h = headers.find("Upgrade");
+  if (h != headers.end()) {
+    protocol = h->second;
+    return true;
+  }
+  return false;
+}
+
+static ConnectionStatus
+generateResponse(http::request const& request,
+                 fs::cache const& files,
+                 http::response& response) {
+  switch (request.get_method()) {
+  case http::request::method::GET: {
+    bool closeOnClientRequest = false;
+    std::string upgradeTo;
+    if (wantsToClose(request)) {
+      closeOnClientRequest = true;
+    } else if (wantsToUpgrade(request, upgradeTo)) {
+      if (upgradeTo == "websocket") {
+        return generateWebsocketHandshake(request, files, response);
+      } else {
+        return generateHttpErrorResponse(
+          http::response::status_code::NOT_IMPLEMENTED, files, response);
+      }
+    }
+    auto uri = request.get_uri();
+    if (uri == "/") {
+      uri = "/index.html";
+    }
+    auto content = files.find(uri, true);
+    if (!content) {
+      return generateHttpErrorResponse(
+        http::response::status_code::NOT_FOUND, files, response);
+    }
+    response.set_status_code(http::response::status_code::OK);
+    response.set_content(content);
+    if (closeOnClientRequest) {
+      response.get_headers().insert(std::make_pair("Connection", "close"));
+      return ConnectionStatus::OkClose;
+    }
+    return ConnectionStatus::Ok;
+  } break;
+  default:
+    return generateHttpErrorResponse(
+      http::response::status_code::NOT_IMPLEMENTED, files, response);
+  }
 }
 
 using tls_channel = com::channel<event::scheduler, Socket>;
@@ -74,42 +153,23 @@ httpServer(event::scheduler& s,
            fs::cache const& files) {
   tls_channel channel(s, client);
   auto chars = channel.async_char_stream();
-  bool upgradeToWebsocket = false;
+  ConnectionStatus status = ConnectionStatus::Ok;
   for co_await (auto request : http::request::stream(chars)) {
-      //std::cout << ">>>>" << std::endl;
-      //std::cout << request;
       http::response response;
-      if (request.get_method() == http::request::method::GET) {
-        auto& headers = request.get_headers();
-        auto upgrade = headers.find("Upgrade");
-        if (upgrade != headers.end()) {
-          if (upgrade->second == "websocket") {
-            upgradeToWebsocket = websocketHandshake(headers, response);
-          } else {
-            response.set_status_code(http::response::status_code::NOT_IMPLEMENTED);
-          }
-        } else {
-          auto uri = request.get_uri();
-          if (uri == "/") {
-            uri = "/index.html";
-          }
-          auto content = files.find(uri, true);
-          if (content) {
-            response.set_status_code(http::response::status_code::OK);
-            response.set_content(content);
-          } else {
-            response.set_status_code(http::response::status_code::NOT_FOUND);
-          }
-        }
-      } else {
-        response.set_status_code(http::response::status_code::NOT_IMPLEMENTED);
+      status = generateResponse(request, files, response);
+      if (status != ConnectionStatus::Ok) {
+        std::cout << "Noteworthy HTTP Request:" << std::endl;
+        std::cout << ">>>>" << std::endl;
+        std::cout << request;
+        std::cout << "====" << std::endl;
+        std::cout << response;
+        std::cout << "<<<<" << std::endl;
       }
+      
       auto buffer = response.serialize();
-      //std::cout << "====" << std::endl;
       std::size_t sent = 0;
       auto toSend = buffer.size();
       while (sent < toSend) {
-        //std::cout << response;
         auto bytes = co_await client.async_write(s, buffer.data() + sent, toSend - sent);
         if (bytes == 0) {
           std::cout << "closed: " << client << std::endl;
@@ -117,16 +177,14 @@ httpServer(event::scheduler& s,
         }
         sent += bytes;
       }
-      //std::cout << "<<<<" << std::endl;
-      if (upgradeToWebsocket) {
+      if (status != ConnectionStatus::Ok) {
         break;
       }
     }
-  if (upgradeToWebsocket) {
+  if (status == ConnectionStatus::Upgrade) {
     std::cout << "upgrade: " << client << std::endl;
     for co_await (auto frame : websocket::stream(channel)) {
         std::string msg(frame.data.begin(), frame.data.end());
-        //std::cout << "websocket: " << msg << std::endl;
         if (!co_await websocket::async_send_text(channel, "Hey there!")) {
           break;
         }

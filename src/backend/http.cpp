@@ -22,6 +22,7 @@ reasonPhrase(response::status_code sc) {
   switch (sc) {
   case response::status_code::SWITCHING_PROTOCOLS: return "Switching Protocols";
   case response::status_code::OK: return "OK";
+  case response::status_code::MOVED_PERMANENTLY: return "Moved Permanently";
   case response::status_code::BAD_REQUEST: return "Bad Request";
   case response::status_code::NOT_FOUND: return "Not Found";
   case response::status_code::NOT_IMPLEMENTED: return "Not Implemented";

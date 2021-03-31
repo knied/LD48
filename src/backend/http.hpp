@@ -63,8 +63,18 @@ public:
     return mHeaders;
   }
 
+  // TODO: I dont like this API anymore
+  // * Should use com::channel
+  // * Reading a single request is hacky
   static coro::async_generator<http::request>
   stream(coro::async_generator<char>& chars);
+  static coro::task<http::request>
+  async_read(coro::async_generator<char>& chars) {
+    for co_await (auto request : stream(chars)) {
+        co_return request;
+      }
+    co_return request();
+  }
   /*template<typename async_ctx, typename async_io_if>
   static coro::async_generator<http::request>
   stream(com::channel<async_ctx, async_io_if>& channel) {
@@ -86,6 +96,7 @@ public:
   enum class status_code : int {
     SWITCHING_PROTOCOLS=101,
     OK=200,
+    MOVED_PERMANENTLY=301,
     BAD_REQUEST=400,
     NOT_FOUND=404,
     NOT_IMPLEMENTED=501

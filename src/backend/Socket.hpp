@@ -6,7 +6,7 @@
 ////////////////////////////////////////////////////////////////////////////////
 
 #include "event.hpp"
-#include "TLS.hpp"
+#include "tls.hpp"
 #include <iostream>
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -15,90 +15,129 @@ struct addrinfo;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-enum IPVersion {
+namespace net {
+
+////////////////////////////////////////////////////////////////////////////////
+
+enum ip_version {
   IPv4,
   IPv6,
   IPvX
 }; // IPVersion
 
-enum SocketType {
+enum socket_type {
   TCP,
   UDP
 }; // SocketType
 
-using AddressInfo = addrinfo;
+using address_info = addrinfo;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class AddressOptions {
+class address_options {
 public:
-  class Iterator {
-    AddressInfo* mEntry;
+  class iterator {
+    address_info* mEntry;
     
   public:
-    Iterator();
-    Iterator(AddressInfo* entry);
+    iterator();
+    iterator(address_info* entry);
     
-    Iterator const& operator ++ ();
-    bool operator == (Iterator const& iterator) const;
-    bool operator != (Iterator const& iterator) const;
-    AddressInfo const& operator * () const;
+    iterator const& operator ++ ();
+    bool operator == (iterator const& other) const;
+    bool operator != (iterator const& other) const;
+    address_info const& operator * () const;
   }; // Iterator
     
  private:
-  AddressInfo *mList;
+  address_info *mList;
   
  public:
-  AddressOptions(IPVersion version, SocketType type,
+  address_options(ip_version version, socket_type type,
                  char const* host, char const* port);
-  ~AddressOptions();
+  ~address_options();
   
-  Iterator begin() const;
-  Iterator end() const;
+  iterator begin() const;
+  iterator end() const;
 
  private:
-  AddressOptions(AddressOptions const&);
-  AddressOptions const& operator = (AddressOptions const&);
+  address_options(address_options const&);
+  address_options const& operator = (address_options const&);
   
 }; // AddressOptions
 
 ////////////////////////////////////////////////////////////////////////////////
 
-std::ostream& operator << (std::ostream& stream, AddressInfo const& info);
-
-////////////////////////////////////////////////////////////////////////////////
-
-class Socket {
+class socket final {
 public:
-  Socket();
-  Socket(AddressInfo const& info, int maxQueue, TLSConfig const& tlsConfig);
-  Socket(Socket&& nbs);
-  Socket(Socket const&) = delete;
-  Socket const& operator = (Socket const&) = delete;
-  ~Socket();
+  socket();
+  socket(address_info const& info, int maxQueue);
+  socket(socket&& nbs);
+  socket(socket const&) = delete;
+  socket& operator = (socket const&) = delete;
+  ~socket();
   
-  Socket const& operator = (Socket&& nbs);
+  socket& operator = (socket&& nbs);
   operator bool() const;
   void close();
 
-  coro::task<Socket> async_accept(event::scheduler& s);
-  coro::task<std::size_t> async_read(event::scheduler& s, char* buffer, std::size_t count);
-  coro::task<std::size_t> async_write(event::scheduler& s, char const* buffer, std::size_t count);
+  coro::task<socket>
+  async_accept(event::scheduler& s);
+  coro::task<std::size_t>
+  async_read(event::scheduler& s, void* buffer, size_t count);
+  coro::task<std::size_t>
+  async_write(event::scheduler& s, void const* buffer, size_t count);
+
+  std::string getLocalName() const;
+  std::string getRemoteName() const;
+
+protected:
+  socket(int fd);
+
+private:
+  int mSocket;
+}; // socket
+
+class tls_socket final {
+public:
+  tls_socket();
+  tls_socket(address_info const& info, int maxQueue, crypto::config const& tlsConfig);
+  tls_socket(tls_socket&& nbs);
+  tls_socket(tls_socket const&) = delete;
+  tls_socket& operator = (tls_socket const&) = delete;
+  ~tls_socket();
+  
+  tls_socket& operator = (tls_socket&& nbs);
+  operator bool() const;
+  void close();
+
+  coro::task<tls_socket>
+  async_accept(event::scheduler& s);
+  coro::task<std::size_t>
+  async_read(event::scheduler& s, char* buffer, std::size_t count);
+  coro::task<std::size_t>
+  async_write(event::scheduler& s, char const* buffer, std::size_t count);
 
   std::string getLocalName() const;
   std::string getRemoteName() const;
 
 private:
-  Socket(int fd, TLSContext&& tls);
+  tls_socket(int fd, crypto::context&& tls);
 
 private:
   int mSocket;
-  TLSContext mTls;
-}; // Socket
+  crypto::context mTls;
+}; // tls_socket
 
 ////////////////////////////////////////////////////////////////////////////////
 
-std::ostream& operator << (std::ostream& stream, Socket const& socket);
+} // namespace net
+
+////////////////////////////////////////////////////////////////////////////////
+
+std::ostream& operator << (std::ostream& stream, net::address_info const& info);
+std::ostream& operator << (std::ostream& stream, net::socket const& socket);
+std::ostream& operator << (std::ostream& stream, net::tls_socket const& socket);
 
 ////////////////////////////////////////////////////////////////////////////////
 

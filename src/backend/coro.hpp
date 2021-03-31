@@ -116,7 +116,7 @@ public:
     }
   }
 private:
-  std::exception_ptr _exception;
+  std::exception_ptr _exception = nullptr;
 };
 
 template<typename return_type>
@@ -236,10 +236,16 @@ struct generator {
     }
     void return_void() {}
     void unhandled_exception() {
-      std::rethrow_exception(std::current_exception());
+      _exception = std::current_exception();
+    }
+    void rethrow_exception() {
+      if (_exception) {
+        std::rethrow_exception(_exception);
+      }
     }
     
     T const* _current;
+    std::exception_ptr _exception = nullptr;
   };
   
   struct iterator {
@@ -256,7 +262,11 @@ struct generator {
     iterator& operator ++ () {
       assert(_coroutine && "Incrementing invalid iterator");
       _coroutine.resume();
-      if (_coroutine.done()) { _coroutine = nullptr; }
+      if (_coroutine.done()) {
+        auto tmp = _coroutine;
+        _coroutine = nullptr;
+        tmp.promise().rethrow_exception();
+      }
       return *this;
     }
     T const& operator * () const {
@@ -295,6 +305,7 @@ struct generator {
     if (_coroutine) {
       _coroutine.resume();
       if (_coroutine.done()) {
+        _coroutine.promise().rethrow_exception();
         return end();
       }
     }
@@ -329,11 +340,17 @@ struct async_generator {
     }
     void return_void() {}
     void unhandled_exception() {
-      std::rethrow_exception(std::current_exception());
+      _exception = std::current_exception();
+    }
+    void rethrow_exception() {
+      if (_exception) {
+        std::rethrow_exception(_exception);
+      }
     }
 
     std::experimental::coroutine_handle<> _continuation = nullptr;
     std::optional<T> _current;
+    std::exception_ptr _exception = nullptr;
   };
   
   struct iterator {
@@ -349,7 +366,9 @@ struct async_generator {
     }
     decltype(auto) await_resume() {
       if (_coroutine.done()) {
+        auto tmp = _coroutine;
         _coroutine = nullptr;
+        tmp.promise().rethrow_exception();
       }
       return *this;
     }

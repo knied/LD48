@@ -1,10 +1,14 @@
 ////////////////////////////////////////////////////////////////////////////////
 
 #include "http.hpp"
+#include <sstream>
 
 ////////////////////////////////////////////////////////////////////////////////
 
 namespace http {
+
+constexpr std::size_t maxAllowedCharsPerLine = 256;
+constexpr std::size_t maxAllowedLinesInHeader = 32;
 
 static constexpr char const*
 methodToString(request::method m) {
@@ -42,9 +46,14 @@ isWhitespace(char c) {
 
 static coro::async_generator<std::string>
 messageLines(coro::async_generator<char>& chars) {
-  // TODO(security): Is there a maximum line length? Should I define one?
   std::string line;
   for co_await (auto c : chars) {
+      if (line.size() > maxAllowedCharsPerLine) {
+        std::stringstream ss;
+        ss << "error: maxAllowedCharsPerLine="
+           << maxAllowedCharsPerLine << " exceeded ";
+        throw std::runtime_error(ss.str());
+      }
     if (c != '\r' && c != '\n') {
       line += c;
     } else if (c == '\n') {
@@ -136,30 +145,34 @@ parseRequestLine(std::string const& line, request& req) {
   auto it = tokens.begin();
   auto end = tokens.end();
   if (it == end) {
-    std::cout << "Missing request method token" << std::endl;
+    throw std::runtime_error("error: Missing request method token");
     return false;
   }
   auto methodToken = *it;
   if (++it == end) {
-    std::cout << "Missing uri token" << std::endl;
+    throw std::runtime_error("error: Missing uri token");
     return false;
   }
   auto uriToken = *it;
   if (++it == end) {
-    std::cout << "Missing version token" << std::endl;
+    throw std::runtime_error("error: Missing version token");
     return false;
   }
   auto versionToken = *it;
   if (++it != end) {
-    std::cout << "Unexpected additional tokens" << std::endl;
+    throw std::runtime_error("error: Unexpected additional tokens");
     return false;
   }
   if (versionToken != "HTTP/1.1") {
-    std::cout << "Unsupported HTTP version " << versionToken << std::endl;
+    std::stringstream ss;
+    ss << "error: Unsupported HTTP version " << versionToken;
+    throw std::runtime_error(ss.str());
     return false;
   }
   if (methodToken != "GET") {
-    std::cout << "Unsupported request method " << methodToken << std::endl;
+    std::stringstream ss;
+    ss << "error: Unsupported request method " << methodToken;
+    throw std::runtime_error(ss.str());
     return false;
   }
   req.set_method(request::method::GET);
@@ -171,7 +184,7 @@ static bool
 parseMessageHeader(std::string const& line, request& req) {
   auto p0 = line.find(':');
   if (p0 == std::string::npos) {
-    std::cout << "No ':' separator found" << std::endl;
+    throw std::runtime_error("error: No ':' separator found");
     return false;
   }
   auto p1 = p0+1;
@@ -192,20 +205,44 @@ request::stream(coro::async_generator<char>& chars) {
     //co_await ++it;
     //std::cout << "request_line: " << request_line << std::endl;
     request req;
-    if (!parseRequestLine(request_line, req)) {
-      std::cout << "Malformed request-line:" << std::endl;
-      std::cout << request_line << std::endl;
+    try {
+      if (!parseRequestLine(request_line, req)) {
+        co_return;
+      }
+    } catch (std::runtime_error& err) {
+      std::stringstream ss;
+      ss << err.what() << std::endl;
+      ss << "note: While parsing request \"" << request_line << "\"";
+      throw std::runtime_error(ss.str());
       co_return;
     }
 
+    std::size_t lineCount = 0;
     std::string multiLine;
     while ((co_await ++it) != end) {
       auto line = *it;
+      lineCount++;
+      if (lineCount > maxAllowedLinesInHeader) {
+        std::stringstream ss;
+        ss << "error: maxAllowedLinesInHeader="
+           << maxAllowedLinesInHeader << " exceeded" << std::endl;
+        ss << "note: While parsing line \"" << line << "\"" << std::endl;
+        ss << "note: While parsing request \"" << request_line << "\"";
+        throw std::runtime_error(ss.str());
+        co_return;
+      }
       //std::cout << "line: " << line << std::endl;
       if ((line.size() == 0 || !isWhitespace(line[0])) && multiLine.size()) {
-        if (!parseMessageHeader(multiLine, req)) {
-          std::cout << "Malformed message-header" << std::endl;
-          std::cout << multiLine << std::endl;
+        try {
+          if (!parseMessageHeader(multiLine, req)) {
+            co_return;
+          }
+        } catch (std::runtime_error& err) {
+          std::stringstream ss;
+          ss << err.what() << std::endl;
+          ss << "note: While parsing message header \"" << multiLine << "\"" << std::endl;
+          ss << "note: While parsing request \"" << request_line << "\"";
+          throw std::runtime_error(ss.str());
           co_return;
         }
         multiLine.clear();

@@ -30,6 +30,7 @@ blocking(coro::async_generator<T> g) {
     while (!t.done()) {
       assert(false && "should not block");
     }
+    t.result();
     if (it != g.end()) {
       co_yield *it;
     }
@@ -91,6 +92,49 @@ TEST(http, request_stream) {
     EXPECT_EQ(e.get_headers(), r.get_headers());
   }
   EXPECT_TRUE(it == expected.end());
+}
+
+TEST(http, maxAllowedLinesInHeader_exceeded) {
+  std::string s = "GET / HTTP/1.1\r\n";
+  for (int i = 0; i < 100; ++i) {
+    s += "Dummy: header\r\n";
+  }
+  s += "\r\n";
+  bool exception = false;
+  auto chars = char_feeder(s);
+  try {
+    for (auto& r : blocking(http::request::stream(chars))) {
+      (void)r;
+      ASSERT_TRUE(false); // should not be reached
+    }
+  } catch (std::runtime_error& err) {
+    std::cout << "Expected:" << std::endl;
+    std::cout << err.what() << std::endl;
+    exception = true;
+  }
+  EXPECT_TRUE(exception);
+}
+
+TEST(http, maxAllowedCharsPerLine_exceeded) {
+  std::string s = "GET / HTTP/1.1\r\n";
+  s += "Very-Long: a";
+  for (int i = 0; i < 1000; ++i) {
+    s += 'h';
+  }
+  s += "\r\n\r\n";
+  bool exception = false;
+  auto chars = char_feeder(s);
+  try {
+    for (auto& r : blocking(http::request::stream(chars))) {
+      (void)r;
+      ASSERT_TRUE(false); // should not be reached
+    }
+  } catch (std::runtime_error& err) {
+    std::cout << "Expected:" << std::endl;
+    std::cout << err.what() << std::endl;
+    exception = true;
+  }
+  EXPECT_TRUE(exception);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

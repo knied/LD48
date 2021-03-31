@@ -22,16 +22,10 @@ public:
   async_char_stream() {
     while (true) {
       char c;
-      try {
-        auto bytes = co_await m_io.async_read(m_ctx, &c, 1);
-        if (bytes != 1) {
-          co_return; // connection was closed
-        }
-      } catch (std::runtime_error const& err) {
-        std::cout << err.what() << std::endl;
-        co_return; // error
+      auto bytes = co_await m_io.async_read(m_ctx, &c, 1);
+      if (bytes != 1) {
+        co_return; // connection was closed
       }
-      
       co_yield c;
     }
   }

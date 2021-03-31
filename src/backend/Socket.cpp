@@ -10,6 +10,7 @@
 #include <fcntl.h>
 #include <errno.h>
 #include <iostream>
+#include <sstream>
 #include <cassert>
 #include <string.h>
 
@@ -57,7 +58,7 @@ AddressOptions::AddressOptions(IPVersion version, SocketType type,
   hints.ai_flags = AI_PASSIVE;
   int status = getaddrinfo(host, port, &hints, &mList);
   if (status != 0) {
-    throw("Unable to 'getaddrinfo'.");
+    throw std::runtime_error("error: Unable to 'getaddrinfo'");
     mList = nullptr;
     return;
   }
@@ -125,25 +126,25 @@ Socket::Socket(AddressInfo const& info, int maxQueue, TLSConfig const& tlsConfig
   mSocket = socket(info.ai_family, info.ai_socktype, 0);
   if (mSocket < 0) {
     mSocket = -1;
-    throw std::runtime_error("socket() failed");
+    throw std::runtime_error("error: socket() failed");
   }
   if (!makeNonBlocking(mSocket)) {
     close();
-    throw std::runtime_error("makeNonBlocking() failed");
+    throw std::runtime_error("error: makeNonBlocking() failed");
   }
   int on = 1;
   if (setsockopt(mSocket, SOL_SOCKET, SO_REUSEADDR, (char *)&on, sizeof(on))) {
     close();
-    throw std::runtime_error("setsockopt() failed");
+    throw std::runtime_error("error: setsockopt() failed");
   }
   if (::bind(mSocket, info.ai_addr, info.ai_addrlen)) {
     close();
-    throw std::runtime_error("bind() failed");
+    throw std::runtime_error("error: bind() failed");
   }
   int status = ::listen(mSocket, maxQueue);
   if (status < 0) {
     close();
-    throw std::runtime_error("listen() failed");
+    throw std::runtime_error("error: listen() failed");
   }
 }
 
@@ -233,11 +234,12 @@ coro::task<std::size_t> Socket::async_read(event::scheduler& s, char* buffer, st
     co_return result;
   }
   auto error_msg = tls_error(mTls.context());
+  std::stringstream ss;
+  ss << "error: tls_read failed with result " << result;
   if (error_msg != nullptr) {
-    throw std::runtime_error(error_msg);
-  } else {
-    throw std::runtime_error("tls_read failed");
+    ss << std::endl << "note: \"" << error_msg << "\"";
   }
+  throw std::runtime_error(ss.str());
   co_return 0;
 }
 
@@ -255,11 +257,12 @@ coro::task<std::size_t> Socket::async_write(event::scheduler& s, char const* buf
     co_return result;
   }
   auto error_msg = tls_error(mTls.context());
+  std::stringstream ss;
+  ss << "error: tls_write failed with result " << result;
   if (error_msg != nullptr) {
-    throw std::runtime_error(error_msg);
-  } else {
-    throw std::runtime_error("tls_read failed");
+    ss << std::endl << "note: \"" << error_msg << "\"";
   }
+  throw std::runtime_error(ss.str());
   co_return 0;
 }
 

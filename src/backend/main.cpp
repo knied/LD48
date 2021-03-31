@@ -125,9 +125,12 @@ static coro::sync_task<void>
 httpServer(event::scheduler& s,
            Socket client,
            fs::cache const& files) {
+  std::string clientName = std::to_string(client);
+  
   tls_channel channel(s, client);
   auto chars = channel.async_char_stream();
   ConnectionStatus status = ConnectionStatus::Ok;
+  try {
   for co_await (auto request : http::request::stream(chars)) {
       http::response response;
       status = generateResponse(request, files, response);
@@ -165,6 +168,11 @@ httpServer(event::scheduler& s,
         }
         co_await websocket::async_send_close(channel);
       }
+  }
+  } catch (std::runtime_error& err) {
+    std::cout << dateAndTime() << " - Fatal Client Error:" << std::endl;
+    std::cout << err.what() << std::endl;
+    std::cout << "note: While handling client " << clientName << std::endl;
   }
   std::cout << dateAndTime() << " - closed (end): " << client << std::endl;
 }

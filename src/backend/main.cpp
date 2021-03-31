@@ -133,6 +133,7 @@ httpServer(event::scheduler& s,
       status = generateResponse(request, files, response);
       if (status != ConnectionStatus::Ok) {
         std::cout << dateAndTime() << " - Noteworthy HTTP Request:" << std::endl;
+        std::cout << dateAndTime() << " - client: " << client << std::endl;
         std::cout << ">>>>" << std::endl;
         std::cout << request;
         std::cout << "====" << std::endl;

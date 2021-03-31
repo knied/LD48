@@ -211,35 +211,37 @@ httpToHttpsForwarder(event::scheduler& s,
   open_channel channel(s, client);
   auto chars = channel.async_char_stream();
   try {
-    auto request = co_await http::request::async_read(chars);
-    std::string host;
-    http::response response;
-    if (!hasHostHeader(request, host)) {
-      // Host header is required
-      // TODO: Describe reason in message body?
-      response.set_status_code(http::response::status_code::BAD_REQUEST);
-      response.get_headers().insert(std::make_pair("Connection", "close"));
-    } else {
-      // TODO: be more strict about the host header?
-      auto location = "https://" + host + request.get_uri();
-      response.set_status_code(http::response::status_code::MOVED_PERMANENTLY);
-      response.get_headers().insert(std::make_pair("Location", location));
-      response.get_headers().insert(std::make_pair("Connection", "close"));
-    }
+    for co_await (auto request : http::request::stream(chars)) {
+        std::string host;
+        http::response response;
+        if (!hasHostHeader(request, host)) {
+          // Host header is required
+          // TODO: Describe reason in message body?
+          response.set_status_code(http::response::status_code::BAD_REQUEST);
+          response.get_headers().insert(std::make_pair("Connection", "close"));
+        } else {
+          // TODO: be more strict about the host header?
+          auto location = "https://" + host + request.get_uri();
+          response.set_status_code(http::response::status_code::MOVED_PERMANENTLY);
+          response.get_headers().insert(std::make_pair("Location", location));
+          response.get_headers().insert(std::make_pair("Connection", "close"));
+        }
     
-    std::cout << dateAndTime() << " - Noteworthy HTTP Request:" << std::endl;
-    std::cout << dateAndTime() << " - client: " << clientName << std::endl;
-    std::cout << ">>>>" << std::endl;
-    std::cout << request;
-    std::cout << "====" << std::endl;
-    std::cout << response;
-    std::cout << "<<<<" << std::endl;
+        std::cout << dateAndTime() << " - Noteworthy HTTP Request:" << std::endl;
+        std::cout << dateAndTime() << " - client: " << clientName << std::endl;
+        std::cout << ">>>>" << std::endl;
+        std::cout << request;
+        std::cout << "====" << std::endl;
+        std::cout << response;
+        std::cout << "<<<<" << std::endl;
 
-    if (!co_await http::response::async_write(channel, response)) {
-      std::cout << dateAndTime()
-                << " - closed (write): " << clientName << std::endl;
-      co_return;
-    }
+        if (!co_await http::response::async_write(channel, response)) {
+          std::cout << dateAndTime()
+                    << " - closed (write): " << clientName << std::endl;
+          co_return;
+        }
+        break;
+      }
   } catch (std::runtime_error& err) {
     std::cout << dateAndTime() << " - Fatal Client Error:" << std::endl;
     std::cout << err.what() << std::endl;

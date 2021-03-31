@@ -68,13 +68,6 @@ public:
   // * Reading a single request is hacky
   static coro::async_generator<http::request>
   stream(coro::async_generator<char>& chars);
-  static coro::task<http::request>
-  async_read(coro::async_generator<char>& chars) {
-    for co_await (auto request : stream(chars)) {
-        co_return request;
-      }
-    co_return request();
-  }
   
 private:
   method mMethod = method::GET;

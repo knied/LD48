@@ -16,8 +16,8 @@
 
 #ifndef MSG_NOSIGNAL
 #define MSG_NOSIGNAL 0
-#define NET_DISABLE_SIGPIPE_ON_SOCKET
 #endif
+#define NET_DISABLE_SIGPIPE_ON_SOCKET
 
 ////////////////////////////////////////////////////////////////////////////////
 

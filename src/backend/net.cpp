@@ -14,6 +14,11 @@
 #include <cassert>
 #include <string.h>
 
+#ifndef MSG_NOSIGNAL
+#define MSG_NOSIGNAL 0
+#define NET_DISABLE_SIGPIPE_ON_SOCKET
+#endif
+
 ////////////////////////////////////////////////////////////////////////////////
 
 struct async_accept_impl {
@@ -159,6 +164,17 @@ static bool makeNonBlocking(int socket) {
   return true;
 }
 
+#ifdef NET_DISABLE_SIGPIPE_ON_SOCKET
+static bool disableSIGPIPE(int socket) {
+  int on = 1;
+  if (setsockopt(socket, SOL_SOCKET, SO_NOSIGPIPE, (char *)&on, sizeof(on))) {
+    throw std::runtime_error("error: setsockopt(SO_NOSIGPIPE) failed");
+    return false;
+  }
+  return true;
+}
+#endif
+
 ////////////////////////////////////////////////////////////////////////////////
 
 socket::socket()
@@ -181,7 +197,7 @@ socket::socket(address_info const& info, int maxQueue)
   int on = 1;
   if (setsockopt(mSocket, SOL_SOCKET, SO_REUSEADDR, (char *)&on, sizeof(on))) {
     close();
-    throw std::runtime_error("error: setsockopt() failed");
+    throw std::runtime_error("error: setsockopt(SO_REUSEADDR) failed");
   }
   if (::bind(mSocket, info.ai_addr, info.ai_addrlen)) {
     close();
@@ -238,6 +254,12 @@ socket::async_accept(event::scheduler& s) {
     ::close(client);
     co_return socket();
   }
+#ifdef NET_DISABLE_SIGPIPE_ON_SOCKET
+  if (!disableSIGPIPE(client)) {
+    ::close(client);
+    co_return socket();
+  }
+#endif
   co_return socket(client);
 }
 

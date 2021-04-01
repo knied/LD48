@@ -248,74 +248,34 @@ httpToHttpsForwarder(event::scheduler& s,
     std::cout << "note: While handling client " << clientName << std::endl;
   }
   std::cout << dateAndTime() << " - closed (end): " << clientName << std::endl;
-  client.close();
 }
 
 coro::sync_task<void>
 httpsAcceptor(event::scheduler& s,
               net::tls_socket& listener,
               fs::cache const& files) {
-  std::vector<coro::sync_task<void>> connections;
   while (true) {
-    //std::cout << "accepting..." << std::endl;
     auto client = co_await listener.async_accept(s);
     if (!client) {
       std::cout << dateAndTime() << " - accept failed" << std::endl;
       continue;
     }
-    std::size_t garbage = 0;
-    connections.erase(
-      std::remove_if(connections.begin(), connections.end(),
-                     [&garbage](auto const& c) {
-                       if (c.done()) {
-                         garbage++;
-                         try {
-                           c.result();
-                         } catch (std::runtime_error const& e) {
-                           std::cout << "exception: " << e.what() << std::endl;
-                         }
-                       }
-                       return c.done();
-                     }),
-      connections.end());
-    std::stringstream ss;
-    ss << client;
-    connections.push_back(httpsServer(s, std::move(client), files));
-    std::cout << dateAndTime() << " - accepted: " << ss.str() << " #connections = " << connections.size() << " #garbage = " << garbage << std::endl;
-    connections.back().start();
+    std::cout << dateAndTime() << " - accepted: " << client << std::endl;
+    s.execute(httpsServer(s, std::move(client), files));
   }
 }
 
 coro::sync_task<void>
 httpAcceptor(event::scheduler& s,
              net::socket& listener) {
-  std::vector<coro::sync_task<void>> connections;
   while (true) {
     auto client = co_await listener.async_accept(s);
     if (!client) {
       std::cout << dateAndTime() << " - accept failed" << std::endl;
       continue;
     }
-    std::size_t garbage = 0;
-    connections.erase(
-      std::remove_if(connections.begin(), connections.end(),
-                     [&garbage](auto const& c) {
-                       if (c.done()) {
-                         garbage++;
-                         try {
-                           c.result();
-                         } catch (std::runtime_error const& e) {
-                           std::cout << "exception: " << e.what() << std::endl;
-                         }
-                       }
-                       return c.done();
-                     }),
-      connections.end());
-    std::stringstream ss;
-    ss << client;
-    connections.push_back(httpToHttpsForwarder(s, std::move(client)));
-    std::cout << dateAndTime() << " - accepted: " << ss.str() << " #connections = " << connections.size() << " #garbage = " << garbage << std::endl;
-    connections.back().start();
+    std::cout << dateAndTime() << " - accepted: " << client << std::endl;
+    s.execute(httpToHttpsForwarder(s, std::move(client)));
   }
 }
 
@@ -426,12 +386,10 @@ int main(int argc, char const* argv[]) {
 
   std::vector<coro::sync_task<void>> tasks;
   for (auto& listener : httpsListeners) {
-    tasks.push_back(httpsAcceptor(s, *listener, files));
-    tasks.back().start();
+    s.execute(httpsAcceptor(s, *listener, files));
   }
   for (auto& listener : httpListeners) {
-    tasks.push_back(httpAcceptor(s, *listener));
-    tasks.back().start();
+    s.execute(httpAcceptor(s, *listener));
   }
   s.run();
   

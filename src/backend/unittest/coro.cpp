@@ -102,21 +102,51 @@ TEST(coro, task_await_void) {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-coro::sync_task<int> awaitInt(Awaitable& a) {
+coro::sync_task<int> awaitInt(Awaitable& a, int value) {
   co_await a;
-  co_await a;
-  co_return 42;
+  co_return value;
 }
 TEST(coro, task_await_int) {
   Awaitable a;
-  auto t = awaitInt(a);
+  auto t = awaitInt(a, 42);
   t.start();
-  EXPECT_FALSE(t.done());
-  a.resume();
   EXPECT_FALSE(t.done());
   a.resume();
   EXPECT_TRUE(t.done());
   EXPECT_EQ(42, t.result());
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+TEST(coro, task_then) {
+  Awaitable a;
+  auto t0 = awaitInt(a, 42);
+  auto t1 = awaitVoid(a);
+  auto t2 = awaitInt(a, 23);
+  t0.start()
+    .then(t1)
+    .then(t2);
+  EXPECT_FALSE(t0.done());
+  EXPECT_FALSE(t1.done());
+  EXPECT_FALSE(t2.done());
+  a.resume();
+  EXPECT_TRUE(t0.done());
+  EXPECT_FALSE(t1.done());
+  EXPECT_FALSE(t2.done());
+  a.resume();
+  EXPECT_TRUE(t0.done());
+  EXPECT_FALSE(t1.done());
+  EXPECT_FALSE(t2.done());
+  a.resume();
+  EXPECT_TRUE(t0.done());
+  EXPECT_TRUE(t1.done());
+  EXPECT_FALSE(t2.done());
+  a.resume();
+  EXPECT_TRUE(t0.done());
+  EXPECT_TRUE(t1.done());
+  EXPECT_TRUE(t2.done());
+  EXPECT_EQ(42, t0.result());
+  EXPECT_EQ(23, t2.result());
 }
 
 ////////////////////////////////////////////////////////////////////////////////

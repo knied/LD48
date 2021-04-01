@@ -8,6 +8,8 @@
 #include "coro.hpp"
 #include <cassert>
 #include <ev.h>
+#include <vector>
+#include <queue>
 #include <iostream>
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -16,25 +18,52 @@ namespace event {
 
 ////////////////////////////////////////////////////////////////////////////////
 
+template<typename scheduler_type>
+coro::sync_task<void> garbage_collector(scheduler_type& s) {
+  while (true) {
+    co_await std::experimental::suspend_always{};
+    s.cleanup();
+  }
+}
+
 class scheduler {
 public:
-  scheduler() : _loop(::ev_default_loop(0)) {}
+  scheduler()
+    : _garbage_collector(garbage_collector(*this))
+    , _loop(::ev_default_loop(0)) {
+    _garbage_collector.start();
+  }
   void run() {
     ::ev_run(_loop, 0);
   }
-  void run_once() {
+  /*void run_once() {
     ::ev_run(_loop, EVRUN_ONCE);
-  }
-  template<typename return_type>
-  auto run(coro::sync_task<return_type>& t) {
-    t.start();
-    ::ev_run(_loop, 0);
-    return t.result();
-  }
+  }*/
   struct ev_loop* loop() noexcept {
     return _loop;
   }
+
+  void execute(coro::sync_task<void>&& task) {
+    _tasks.push_back(std::move(task));
+    _tasks.back().start()
+      .then(_garbage_collector);
+  }
+  void cleanup() {
+    auto done = [](coro::sync_task<void> const& task) {
+      if (task.done()) {
+        try {
+          task.result();
+        } catch (std::runtime_error const& err) {
+          std::cout << "exception: " << err.what() << std::endl;
+        }
+      }
+      return task.done();
+    };
+    _tasks.erase(std::remove_if(_tasks.begin(), _tasks.end(), done), _tasks.end());
+  }
 private:
+  coro::sync_task<void> _garbage_collector;
+  std::vector<coro::sync_task<void>> _tasks;
   struct ev_loop* _loop;
 };
 
@@ -76,6 +105,7 @@ public:
     ev_io_start(_s.loop(), &_watcher);
   }
   auto await_resume() {
+    _handle = nullptr;
     return _result;
   }
 private:

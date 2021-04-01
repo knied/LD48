@@ -22,28 +22,14 @@ struct final_awaitable final {
   template<typename promise_type>
   constexpr std::experimental::coroutine_handle<>
   await_suspend(std::experimental::coroutine_handle<promise_type> handle) const noexcept {
-    return handle.promise()._continuation;
+    auto c = handle.promise().continuation();
+    return c ? c : std::experimental::noop_coroutine();
   }
   constexpr void await_resume() const noexcept {}
 };
 
-struct async_task_promise_base {
-  std::experimental::coroutine_handle<> _continuation;
-  auto initial_suspend() noexcept { return std::experimental::suspend_always{}; }
-  auto final_suspend() noexcept { return final_awaitable{}; }
-  void set_continuation(std::experimental::coroutine_handle<> handle) noexcept {
-    _continuation = handle;
-  }
-};
-
-struct sync_task_promise_base {
-  auto initial_suspend() noexcept { return std::experimental::suspend_always{}; }
-  auto final_suspend() noexcept { return std::experimental::suspend_always{}; }
-};
-
-template<typename task_type, typename return_type, typename task_promise_base_type>
-class task_promise final
-  : public task_promise_base_type {
+template<typename task_type, typename return_type>
+class task_promise final {
   enum class state { running, done, exception };
 public:
   task_promise() {}
@@ -85,7 +71,20 @@ public:
     }
     return std::move(_return_value);
   }
+  auto initial_suspend() noexcept {
+    return std::experimental::suspend_always{};
+  }
+  auto final_suspend() noexcept {
+    return final_awaitable{};
+  }
+  void set_continuation(std::experimental::coroutine_handle<> handle) noexcept {
+    _continuation = handle;
+  }
+  std::experimental::coroutine_handle<> continuation() const {
+    return _continuation;
+  }
 private:
+  std::experimental::coroutine_handle<> _continuation = nullptr;
   state _state = state::running;
   union {
     return_type _return_value;
@@ -93,9 +92,8 @@ private:
   };
 };
 
-template<typename task_type, typename task_promise_base_type>
-class task_promise<task_type, void, task_promise_base_type> final
-  : public task_promise_base_type {
+template<typename task_type>
+class task_promise<task_type, void> final {
 public:
   task_promise() {}
   task_promise(task_promise const&) = delete;
@@ -115,14 +113,27 @@ public:
       std::rethrow_exception(_exception);
     }
   }
+  auto initial_suspend() noexcept {
+    return std::experimental::suspend_always{};
+  }
+  auto final_suspend() noexcept {
+    return final_awaitable{};
+  }
+  void set_continuation(std::experimental::coroutine_handle<> handle) noexcept {
+    _continuation = handle;
+  }
+  std::experimental::coroutine_handle<> continuation() const {
+    return _continuation;
+  }
 private:
+  std::experimental::coroutine_handle<> _continuation = nullptr;
   std::exception_ptr _exception = nullptr;
 };
 
 template<typename return_type>
 class sync_task final {
 public:
-  using promise_type = task_promise<sync_task, return_type, sync_task_promise_base>;
+  using promise_type = task_promise<sync_task, return_type>;
   using handle_type = std::experimental::coroutine_handle<promise_type>;
   __attribute__((noinline)) // Bug in Clang 11.1? Or am I doing something wrong?
   explicit sync_task(handle_type&& handle) noexcept
@@ -144,16 +155,27 @@ public:
   }
   sync_task(sync_task const&) = delete;
   sync_task& operator = (sync_task const&) = delete;
-  constexpr void start() noexcept {
+  sync_task& start() noexcept {
     if (_handle && !_handle.done()) {
       _handle.resume();
     }
+    return *this;
+  }
+  template<typename then_return_type>
+  auto& then(sync_task<then_return_type>& task) noexcept {
+    if (_handle && !_handle.done() && !task.done()) {
+      _handle.promise().set_continuation(task.handle());
+    }
+    return task;
   }
   constexpr bool done() const noexcept {
     return _handle && _handle.done();
   }
   constexpr return_type result() const {
     return _handle.promise().result();
+  }
+  std::experimental::coroutine_handle<> handle() const {
+    return _handle;
   }
 private:
   std::experimental::coroutine_handle<promise_type> _handle;
@@ -162,7 +184,7 @@ private:
 template<typename return_type>
 class async_task final {
 public:
-  using promise_type = task_promise<async_task, return_type, async_task_promise_base>;
+  using promise_type = task_promise<async_task, return_type>;
   using handle_type = std::experimental::coroutine_handle<promise_type>;
   explicit async_task(handle_type&& handle) noexcept
     : _handle(std::move(handle)) {}
@@ -346,6 +368,9 @@ struct async_generator {
       if (_exception) {
         std::rethrow_exception(_exception);
       }
+    }
+    std::experimental::coroutine_handle<> continuation() const {
+      return _continuation;
     }
 
     std::experimental::coroutine_handle<> _continuation = nullptr;

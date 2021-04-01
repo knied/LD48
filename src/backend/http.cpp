@@ -2,6 +2,7 @@
 
 #include "http.hpp"
 #include <sstream>
+#include <iomanip>
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -40,14 +41,30 @@ mimeTypeToString(content::mime_type t) {
   }
 }
 
-static constexpr bool
+static inline constexpr bool
 isWhitespace(char c) {
   return c == ' ' || c == '\t';
+}
+
+static inline constexpr bool
+isVCHAR(char c) {
+  return (c >= 0x20 && c < 0x7f) || c == 0x09;
+}
+
+template< typename T >
+std::string toHex( T i )
+{
+  std::stringstream stream;
+  stream << "0x"
+         << std::setfill ('0') << std::setw(sizeof(T)*2)
+         << std::hex << (unsigned long long)i;
+  return stream.str();
 }
 
 static coro::async_generator<std::string>
 messageLines(coro::async_generator<char>& chars) {
   std::string line;
+  char prev = 0;
   for co_await (auto c : chars) {
       if (line.size() > maxAllowedCharsPerLine) {
         std::stringstream ss;
@@ -55,14 +72,23 @@ messageLines(coro::async_generator<char>& chars) {
            << maxAllowedCharsPerLine << " exceeded ";
         throw std::runtime_error(ss.str());
       }
-    if (c != '\r' && c != '\n') {
-      line += c;
-    } else if (c == '\n') {
-      std::string tmp;
-      std::swap(tmp, line);
-      co_yield std::move(tmp);
+      if (c != '\r' && c != '\n') {
+        if (!isVCHAR(c)) {
+          std::stringstream ss;
+          ss << "error: Illegal character '" << toHex(c) << "' in message line.";
+          throw std::runtime_error(ss.str());
+        }
+        line += c;
+      } else if (c == '\n') {
+        if (prev != '\r') {
+          throw std::runtime_error("error: Unexpected NL character");
+        }
+        std::string tmp;
+        std::swap(tmp, line);
+        co_yield std::move(tmp);
+      }
+      prev = c;
     }
-  }
 }
 
 class string_pointer {

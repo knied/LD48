@@ -137,4 +137,43 @@ TEST(http, maxAllowedCharsPerLine_exceeded) {
   EXPECT_TRUE(exception);
 }
 
+TEST(http, wrong_line_ending) {
+  std::string s = "GET / HTTP/1.1\n"
+    "Host: localhost\n"
+    "\n";
+  bool exception = false;
+  auto chars = char_feeder(s);
+  try {
+    for (auto& r : blocking(http::request::stream(chars))) {
+      (void)r;
+      ASSERT_TRUE(false); // should not be reached
+    }
+  } catch (std::runtime_error& err) {
+    std::cout << "Expected:" << std::endl;
+    std::cout << err.what() << std::endl;
+    exception = true;
+  }
+  EXPECT_TRUE(exception);
+}
+
+TEST(http, illegal_character) {
+  char illegal[] = { 0x1b, 0x00 };  /* Esc */
+  std::string s = "GET / HTTP/1.1\r\nIllegal: ";
+  s += illegal;
+  s += "\r\n\r\n";
+  bool exception = false;
+  auto chars = char_feeder(s);
+  try {
+    for (auto& r : blocking(http::request::stream(chars))) {
+      (void)r;
+      ASSERT_TRUE(false); // should not be reached
+    }
+  } catch (std::runtime_error& err) {
+    std::cout << "Expected:" << std::endl;
+    std::cout << err.what() << std::endl;
+    exception = true;
+  }
+  EXPECT_TRUE(exception);
+}
+
 ////////////////////////////////////////////////////////////////////////////////

@@ -36,12 +36,12 @@ using async_read = event::io_operation<async_read_impl, decltype(::read)>;
 
 struct async_write_impl {
   static constexpr int events = EV_WRITE;
-  static constexpr decltype(::write)* func = ::write;
+  static constexpr decltype(::send)* func = ::send;
   static inline bool is_ready(ssize_t result) {
     return result >= 0 || (errno != EAGAIN && errno != EWOULDBLOCK);
   }
 };
-using async_write = event::io_operation<async_write_impl, decltype(::write)>;
+using async_write = event::io_operation<async_write_impl, decltype(::send)>;
 
 struct async_tls_read_impl {
   static constexpr int events = EV_READ;
@@ -259,7 +259,7 @@ socket::async_read(event::scheduler& s, void* buffer, size_t count) {
 
 coro::task<std::size_t>
 socket::async_write(event::scheduler& s, void const* buffer, size_t count) {
-  auto result = co_await ::async_write(s, mSocket, mSocket, buffer, count);
+  auto result = co_await ::async_write(s, mSocket, mSocket, buffer, count, MSG_NOSIGNAL);
   if (result >= 0) {
     co_return result;
   }

@@ -41,8 +41,8 @@ generateWebsocketHandshake(http::request const& request,
                            fs::cache const& files,
                            http::response& response) {
   auto& headers = request.get_headers();
-  auto key = headers.find("Sec-WebSocket-Key");
-  auto version = headers.find("Sec-WebSocket-Version");
+  auto key = headers.find("sec-websocket-key");
+  auto version = headers.find("sec-websocket-version");
   if (key == headers.end() || version == headers.end()) {
     return generateHttpErrorResponse(
       http::response::status_code::BAD_REQUEST, files, response);
@@ -64,14 +64,14 @@ generateWebsocketHandshake(http::request const& request,
 static bool
 wantsToClose(http::request const& request) {
   auto& headers = request.get_headers();
-  auto h = headers.find("Connection");
+  auto h = headers.find("connection");
   return h != headers.end() && h->second == "close";
 }
 
 static bool
 wantsToUpgrade(http::request const& request, std::string& protocol) {
   auto& headers = request.get_headers();
-  auto h = headers.find("Upgrade");
+  auto h = headers.find("upgrade");
   if (h != headers.end()) {
     protocol = h->second;
     return true;
@@ -82,7 +82,7 @@ wantsToUpgrade(http::request const& request, std::string& protocol) {
 static bool
 hasHostHeader(http::request const& request, std::string& host) {
   auto& headers = request.get_headers();
-  auto h = headers.find("Host");
+  auto h = headers.find("host");
   if (h != headers.end()) {
     host = h->second;
     return true;

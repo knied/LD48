@@ -64,22 +64,22 @@ TEST(http, request_stream) {
   //expected[0].addLine("GET / HTTP/1.1");
   expected[0].set_method(http::request::method::GET);
   expected[0].set_uri("/");
-  expected[0].get_headers().insert(std::make_pair("Host", "localhost"));
-  expected[0].get_headers().insert(std::make_pair("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"));
-  expected[0].get_headers().insert(std::make_pair("Accept-Language", "en-gb"));
-  expected[0].get_headers().insert(std::make_pair("Connection", "keep-alive"));
-  expected[0].get_headers().insert(std::make_pair("Accept-Encoding", "gzip, deflate, br"));
-  expected[0].get_headers().insert(std::make_pair("User-Agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_4) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/13.1 Safari/605.1.15"));
+  expected[0].get_headers().insert(std::make_pair("host", "localhost"));
+  expected[0].get_headers().insert(std::make_pair("accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"));
+  expected[0].get_headers().insert(std::make_pair("accept-language", "en-gb"));
+  expected[0].get_headers().insert(std::make_pair("connection", "keep-alive"));
+  expected[0].get_headers().insert(std::make_pair("accept-encoding", "gzip, deflate, br"));
+  expected[0].get_headers().insert(std::make_pair("user-agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_4) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/13.1 Safari/605.1.15"));
 
   //expected[1].addLine("GET / HTTP/1.1");
   expected[1].set_method(http::request::method::GET);
   expected[1].set_uri("/hello/world.txt");
-  expected[1].get_headers().insert(std::make_pair("Key", "value"));
+  expected[1].get_headers().insert(std::make_pair("key", "value"));
 
   expected[2].set_method(http::request::method::GET);
   expected[2].set_uri("/some/uri");
-  expected[2].get_headers().insert(std::make_pair("Header0", "split over\tmultiple \tlines"));
-  expected[2].get_headers().insert(std::make_pair("Regular", "header"));
+  expected[2].get_headers().insert(std::make_pair("header0", "split over\tmultiple \tlines"));
+  expected[2].get_headers().insert(std::make_pair("regular", "header"));
 
   auto it = expected.begin();
 
@@ -161,6 +161,25 @@ TEST(http, illegal_character) {
   std::string s = "GET / HTTP/1.1\r\nIllegal: ";
   s += illegal;
   s += "\r\n\r\n";
+  bool exception = false;
+  auto chars = char_feeder(s);
+  try {
+    for (auto& r : blocking(http::request::stream(chars))) {
+      (void)r;
+      ASSERT_TRUE(false); // should not be reached
+    }
+  } catch (std::runtime_error& err) {
+    std::cout << "Expected:" << std::endl;
+    std::cout << err.what() << std::endl;
+    exception = true;
+  }
+  EXPECT_TRUE(exception);
+}
+
+TEST(http, illegal_character_in_field_name) {
+  std::string s = "GET / HTTP/1.1\r\n"
+    "Illegal(): good\r\n"
+    "\r\n";
   bool exception = false;
   auto chars = char_feeder(s);
   try {

@@ -51,6 +51,24 @@ isVCHAR(char c) {
   return (c >= 0x20 && c < 0x7f) || c == 0x09;
 }
 
+static inline constexpr bool
+isDIGIT(char c) {
+  return c >= '0' && c <= '9';
+}
+
+static inline constexpr bool
+isALPHA(char c) {
+  return (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z');
+}
+
+static inline constexpr bool
+isTCHAR(char c) {
+  return isALPHA(c) || isDIGIT(c)
+    || c == '!' || c == '#' || c == '$' || c == '%' || c == '&'
+    || c == '\'' || c == '*' || c == '+' || c == '-' || c == '.'
+    || c == '^' || c == '_' || c == '`' || c == '|' || c == '~';
+}
+
 template< typename T >
 std::string toHex( T i )
 {
@@ -218,7 +236,17 @@ parseMessageHeader(std::string const& line, request& req) {
   while (p1 < line.size() && isWhitespace(line[p1])) {
     p1++;
   }
-  req.get_headers().insert(std::make_pair(line.substr(0, p0), line.substr(p1)));
+  auto name = line.substr(0, p0);
+  std::transform(name.begin(), name.end(), name.begin(), 
+                 [](unsigned char c){ return std::tolower(c); });
+  for (auto c : name) {
+    if (!isTCHAR(c)) {
+      std::stringstream ss;
+      ss << "error: Illegal character '" << c << "' in field name.";
+      throw std::runtime_error(ss.str());
+    }
+  }
+  req.get_headers().insert(std::make_pair(name, line.substr(p1)));
   return true;
 }
 

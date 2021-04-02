@@ -135,7 +135,6 @@ class sync_task final {
 public:
   using promise_type = task_promise<sync_task, return_type>;
   using handle_type = std::experimental::coroutine_handle<promise_type>;
-  __attribute__((noinline)) // Bug in Clang 11.1? Or am I doing something wrong?
   explicit sync_task(handle_type&& handle) noexcept
     : _handle(std::move(handle)) {}
   sync_task(sync_task&& other) noexcept

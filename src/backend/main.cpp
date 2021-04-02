@@ -137,18 +137,52 @@ generateResponse(http::request const& request,
   }
 }
 
+class scoped_logger final {
+public:
+  template<typename tocket_type>
+  scoped_logger(tocket_type const& client,
+                std::string const& context)
+    : _context(context) {
+    std::stringstream ss;
+    ss << client;
+    _name = ss.str();
+    std::cout << dateAndTime() << " - " << _name
+              << " - begin(" << _context << ")" << std::endl;
+  }
+  ~scoped_logger() {
+    std::cout << dateAndTime() << " - " << _name
+              << " - end(" << _context << ")" << std::endl;
+  }
+  scoped_logger(scoped_logger const&) = delete;
+  scoped_logger(scoped_logger&&) = delete;
+  scoped_logger& operator = (scoped_logger const&) = delete;
+  scoped_logger& operator = (scoped_logger&&) = delete;
+  void noteworthy(http::request const& request,
+                  http::response const& response) const {
+    std::cout << dateAndTime() << " - " << _name
+              << " - noteworthy(" << _context << ")" << std::endl;
+    std::cout << ">>>>" << std::endl;
+    std::cout << request;
+    std::cout << "====" << std::endl;
+    std::cout << response;
+    std::cout << "<<<<" << std::endl;
+  }
+  void fatal(std::string const& what) {
+    std::cout << dateAndTime() << " - " << _name
+              << " - fatal(" << _context << ")" << std::endl;
+    std::cout << what << std::endl;
+  }
+private:
+  std::string _name;
+  std::string _context;
+};
+
 using secure_channel = com::channel<event::scheduler, net::tls_socket>;
 static coro::sync_task<void>
 httpsServer(event::scheduler& s,
             net::tls_socket client,
             fs::cache const& files) {
-  std::string clientName;
-  {
-    std::stringstream ss;
-    ss << client;
-    clientName = ss.str();
-  }
-  
+  scoped_logger logger(client, "https");
   secure_channel channel(s, client);
   auto chars = channel.async_char_stream();
   ConnectionStatus status = ConnectionStatus::Ok;
@@ -157,18 +191,10 @@ httpsServer(event::scheduler& s,
       http::response response;
       status = generateResponse(request, files, response);
       if (status != ConnectionStatus::Ok) {
-        std::cout << dateAndTime() << " - Noteworthy HTTPS Request:" << std::endl;
-        std::cout << dateAndTime() << " - client: " << clientName << std::endl;
-        std::cout << ">>>>" << std::endl;
-        std::cout << request;
-        std::cout << "====" << std::endl;
-        std::cout << response;
-        std::cout << "<<<<" << std::endl;
+        logger.noteworthy(request, response);
       }
 
       if (!co_await http::response::async_write(channel, response)) {
-        std::cout << dateAndTime()
-                  << " - closed (write): " << clientName << std::endl;
         co_return;
       }
       if (status != ConnectionStatus::Ok) {
@@ -190,24 +216,15 @@ httpsServer(event::scheduler& s,
 #endif
   }
   } catch (std::runtime_error& err) {
-    std::cout << dateAndTime() << " - Fatal Client Error:" << std::endl;
-    std::cout << err.what() << std::endl;
-    std::cout << "note: While handling client " << clientName << std::endl;
+    logger.fatal(err.what());
   }
-  std::cout << dateAndTime() << " - closed (end): " << clientName << std::endl;
 }
 
 using open_channel = com::channel<event::scheduler, net::socket>;
 static coro::sync_task<void>
 httpToHttpsForwarder(event::scheduler& s,
                      net::socket client) {
-  std::string clientName;
-  {
-    std::stringstream ss;
-    ss << client;
-    clientName = ss.str();
-  }
-  
+  scoped_logger logger(client, "http");
   open_channel channel(s, client);
   auto chars = channel.async_char_stream();
   try {
@@ -227,27 +244,16 @@ httpToHttpsForwarder(event::scheduler& s,
           response.get_headers().insert(std::make_pair("Connection", "close"));
         }
     
-        std::cout << dateAndTime() << " - Noteworthy HTTP Request:" << std::endl;
-        std::cout << dateAndTime() << " - client: " << clientName << std::endl;
-        std::cout << ">>>>" << std::endl;
-        std::cout << request;
-        std::cout << "====" << std::endl;
-        std::cout << response;
-        std::cout << "<<<<" << std::endl;
+        logger.noteworthy(request, response);
 
         if (!co_await http::response::async_write(channel, response)) {
-          std::cout << dateAndTime()
-                    << " - closed (write): " << clientName << std::endl;
           co_return;
         }
         break;
       }
   } catch (std::runtime_error& err) {
-    std::cout << dateAndTime() << " - Fatal Client Error:" << std::endl;
-    std::cout << err.what() << std::endl;
-    std::cout << "note: While handling client " << clientName << std::endl;
+    logger.fatal(err.what());
   }
-  std::cout << dateAndTime() << " - closed (end): " << clientName << std::endl;
 }
 
 coro::sync_task<void>
@@ -260,7 +266,7 @@ httpsAcceptor(event::scheduler& s,
       std::cout << dateAndTime() << " - accept failed" << std::endl;
       continue;
     }
-    std::cout << dateAndTime() << " - accepted: " << client << std::endl;
+    std::cout << dateAndTime() << " - " << client << " - accepted" << std::endl;
     s.execute(httpsServer(s, std::move(client), files));
   }
 }
@@ -274,7 +280,7 @@ httpAcceptor(event::scheduler& s,
       std::cout << dateAndTime() << " - accept failed" << std::endl;
       continue;
     }
-    std::cout << dateAndTime() << " - accepted: " << client << std::endl;
+    std::cout << dateAndTime() << " - " << client << " - accepted" << std::endl;
     s.execute(httpToHttpsForwarder(s, std::move(client)));
   }
 }

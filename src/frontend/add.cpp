@@ -166,7 +166,7 @@ void main() {\n\
     auto fov = 90.0f;
     auto projection = mth::perspective_projection<float>(width, height,
                                                          fov, znear, zfar);
-    auto view = mth::inverse(mth::translation(vec3{0.0f, 0.0f, 10.0f}));
+    auto view = mth::inverse(mth::translation(vec3{0.0f, 0.0f, 5.0f}));
     auto model = mth::identity<float,4,4>();
     static auto anim = 0.0f;
     anim += 0.1f * dt;

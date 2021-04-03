@@ -34,48 +34,66 @@ public:
 };
 
 using vec3 = mth::vector<float,3>;
+using vec4 = mth::vector<float,4>;
 using mat4 = mth::matrix<float,4,4>;
+
+template<typename T, unsigned int R, unsigned int C>
+static constexpr inline unsigned int
+entry_count(mth::matrix<T, R, C> const&) noexcept {
+  return R * C;
+}
+template<typename T, unsigned int R, unsigned int C>
+static constexpr inline gl::attribute_type
+entry_gl_type(mth::matrix<T, R, C> const&) noexcept {
+  return gl::atype<T>();
+}
+
+struct vertex { vec3 pos; vec4 color; };
+struct uniform { vec3 color; mat4 mat; };
+
+static std::vector<gl::attribute_def>
+vertex_defs() {
+  vertex tmp;
+  return {
+    { "a_position", sizeof(vertex), offsetof(vertex, pos), entry_count(tmp.pos), entry_gl_type(tmp.pos), false },
+    { "a_color", sizeof(vertex), offsetof(vertex, color), entry_count(tmp.color), entry_gl_type(tmp.color), false }
+  };
+}
 
 class Game final {
 public:
-  struct vertex { vec3 pos; };
-  struct uniform { vec3 color; mat4 mat; };
-  
   Game(gl::context ctx)
     : mCtx(ctx), mCommandBuffer(mCtx) {
     printf("C Game\n");
     fflush(stdout);
     mPipeline = std::unique_ptr<gl::pipeline>(new gl::pipeline(mCtx, "\
 attribute vec4 a_position;\n\
+attribute vec4 a_color;\n\
 uniform mat4 u_mat;\n\
 void main() {\n\
   gl_Position = u_mat * a_position;\n\
+  gl_Color = a_color;\n\
 }\n","\
 precision mediump float;\n\
-uniform vec3 u_color;\n\
 void main() {\n\
-  gl_FragColor = vec4(u_color, 1.0);\n\
-}\n", {"a_position"}, {"u_color", "u_mat"}));
+  gl_FragColor = gl_Color;\n\
+}\n", {"a_position", "a_color"}, {"u_mat"}));
 
     {
       std::vector<vertex> vd {
-        { vec3{ -1.0f, -1.0f, 0.0f } },
-        { vec3{ 1.0f, -1.0f, 0.0f } },
-        { vec3{ 0.0f, 1.0f, 0.0f } }
+        { vec3{ -1.0f, -1.0f, 0.0f }, vec4{ 1.0f, 0.0f, 0.0f, 1.0f } },
+        { vec3{ 1.0f, -1.0f, 0.0f }, vec4{ 0.0f, 1.0f, 0.0f, 1.0f } },
+        { vec3{ 0.0f, 1.0f, 0.0f }, vec4{ 0.0f, 0.0f, 1.0f, 1.0f } }
       };
       std::vector<unsigned int> id { 0, 1, 2 };
-      std::vector<gl::attribute_def> defs {
-        { "a_position", sizeof(vertex), 0, 3, gl::ATTRIBUTE_FLOAT, false }
-      };
-      mMesh = std::make_unique<gl::mesh>(mCtx, gl::PRIMITIVE_TRIANGLES, vd, id, defs);
+      mMesh = std::make_unique<gl::mesh>(mCtx, gl::PRIMITIVE_TRIANGLES, vd, id, vertex_defs());
     }
 
     mMeshBinding = std::make_unique<gl::mesh_binding>(mCtx, mMesh.get(), mPipeline.get());
 
     {
       std::vector<gl::uniform_def> defs {
-        { "u_color", gl::UNIFORM_VF3, offsetof(uniform, color) },
-        { "u_mat", gl::UNIFORM_MF4, offsetof(uniform, mat) }
+        { "u_color", gl::UNIFORM_VF3, offsetof(uniform, color) }
       };
       mUniformBinding = std::make_unique<gl::uniform_binding>(mCtx, mPipeline.get(), sizeof(uniform), defs);
     }

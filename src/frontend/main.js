@@ -337,6 +337,7 @@ function main(refHeap, wasm, heap) {
             throw 'The WebGL extension OES_vertex_array_object is not supported by your browser :(';
         }
     }
+    gl.enable(gl.DEPTH_TEST);
     //game = new Game(gl);
     const ctx = refHeap.put(gl);
     const udata = wasm.exports.init(ctx);

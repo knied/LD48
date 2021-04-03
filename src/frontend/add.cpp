@@ -169,10 +169,10 @@ void main() {\n\
     auto view = mth::inverse(mth::translation(vec3{0.0f, 0.0f, 10.0f}));
     auto model = mth::identity<float,4,4>();
     static auto anim = 0.0f;
-    anim += dt;
+    anim += 0.1f * dt;
     while (anim > 1.0f) anim -= 1.0f;
     model = model * mth::rotation(mth::from_axis(vec3{0.0f,1.0f,0.0f}, 2.0f * anim * (float)mth::pi));
-    model = model * mth::rotation(mth::from_axis(vec3{1.0f,0.0f,0.0f}, 2.0f * anim * (float)mth::pi));
+    model = model * mth::rotation(mth::from_axis(vec3{1.0f,0.0f,0.0f}, 4.0f * anim * (float)mth::pi));
     auto mvp = projection * view * model;
     
     uniform u{

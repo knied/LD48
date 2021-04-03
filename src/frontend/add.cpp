@@ -172,6 +172,7 @@ void main() {\n\
     anim += dt;
     while (anim > 1.0f) anim -= 1.0f;
     model = model * mth::rotation(mth::from_axis(vec3{0.0f,1.0f,0.0f}, 2.0f * anim * (float)mth::pi));
+    model = model * mth::rotation(mth::from_axis(vec3{1.0f,0.0f,0.0f}, 2.0f * anim * (float)mth::pi));
     auto mvp = projection * view * model;
     
     uniform u{

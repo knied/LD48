@@ -7,6 +7,7 @@
 #include <vector>
 #include <iostream>
 #include <sstream>
+#include <functional>
 
 static std::string
 dateAndTime() {
@@ -172,6 +173,11 @@ public:
               << " - fatal(" << _context << ")" << std::endl;
     std::cout << what << std::endl;
   }
+  void note(std::string const& what) {
+    std::cout << dateAndTime() << " - " << _name
+              << " - note(" << _context << "): "
+              << what << std::endl;
+  }
 private:
   std::string _name;
   std::string _context;
@@ -249,17 +255,55 @@ httpToHttpsForwarder(event::scheduler& s,
         if (!co_await http::response::async_write(channel, response)) {
           co_return;
         }
-        break;
+        co_return;
       }
   } catch (std::runtime_error& err) {
     logger.fatal(err.what());
   }
 }
 
+using open_channel = com::channel<event::scheduler, net::socket>;
+static coro::sync_task<void>
+controlHandler(event::scheduler& s,
+               net::socket client) {
+  bool shutdown = false;
+  scoped_logger logger(client, "control");
+  open_channel channel(s, client);
+  auto chars = channel.async_char_stream();
+  try {
+    for co_await (auto request : http::request::stream(chars)) {
+        std::string host;
+        http::response response;
+        if (request.get_method() != http::request::method::GET ||
+            !hasHostHeader(request, host) ||
+            request.get_uri() != "/shutdown") {
+          // TODO: Describe reason in message body?
+          response.set_status_code(http::response::status_code::BAD_REQUEST);
+          response.get_headers().insert(std::make_pair("Connection", "close"));
+        } else {
+          response.set_status_code(http::response::status_code::OK);
+          response.get_headers().insert(std::make_pair("Connection", "close"));
+          shutdown = true;
+        }
+        logger.noteworthy(request, response);
+        if (!co_await http::response::async_write(channel, response)) {
+          co_return;
+        }
+        if (shutdown) {
+          logger.note("shutdown");
+          s.trigger_shutdown_from_task();
+        }
+        co_return;
+      }
+  } catch (std::runtime_error& err) {
+    logger.fatal(err.what());
+  }
+}
+
+template<typename socket_type, typename handler_type>
 coro::sync_task<void>
-httpsAcceptor(event::scheduler& s,
-              net::tls_socket& listener,
-              fs::cache const& files) {
+acceptor(event::scheduler& s, socket_type& listener,
+         handler_type handler) {
   while (true) {
     auto client = co_await listener.async_accept(s);
     if (!client) {
@@ -267,26 +311,13 @@ httpsAcceptor(event::scheduler& s,
       continue;
     }
     std::cout << dateAndTime() << " - " << client << " - accepted" << std::endl;
-    s.execute(httpsServer(s, std::move(client), files));
+    s.execute(handler(std::move(client)));
   }
 }
 
-coro::sync_task<void>
-httpAcceptor(event::scheduler& s,
-             net::socket& listener) {
-  while (true) {
-    auto client = co_await listener.async_accept(s);
-    if (!client) {
-      std::cout << dateAndTime() << " - accept failed" << std::endl;
-      continue;
-    }
-    std::cout << dateAndTime() << " - " << client << " - accepted" << std::endl;
-    s.execute(httpToHttpsForwarder(s, std::move(client)));
-  }
-}
-
-auto createListeners(char const* host, char const* port, crypto::config const& tlsConfig) {
-  std::vector<std::unique_ptr<net::tls_socket>> listeners;
+template<typename socket_type, typename... arg_types>
+auto createListeners(char const* host, char const* port, arg_types&& ...args) {
+  std::vector<std::unique_ptr<socket_type>> listeners;
 
   {
     // First try to bind to IPv6
@@ -294,7 +325,7 @@ auto createListeners(char const* host, char const* port, crypto::config const& t
     for (auto& info : options) {
       std::cout << "Try to listen on " << info << std::endl;
       try {
-        auto l = std::make_unique<net::tls_socket>(info, 10, tlsConfig);
+        auto l = std::make_unique<socket_type>(info, 10, args...);
         std::cout << "  Listening: " << *l << std::endl;
         listeners.push_back(std::move(l));
         
@@ -310,44 +341,7 @@ auto createListeners(char const* host, char const* port, crypto::config const& t
     for (auto& info : options) {
       std::cout << "Try to listen on " << info << std::endl;
       try {
-        auto l = std::make_unique<net::tls_socket>(info, 10, tlsConfig);
-        std::cout << "  Listening: " << *l << std::endl;
-        listeners.push_back(std::move(l));
-      } catch (std::runtime_error& ex) {
-        std::cout << "  Skipping: " << ex.what() << std::endl;
-      }
-    }
-  }
-
-  return listeners;
-}
-
-auto createListeners(char const* host, char const* port) {
-  std::vector<std::unique_ptr<net::socket>> listeners;
-
-  {
-    // First try to bind to IPv6
-    net::address_options options(net::IPv6, net::TCP, host, port);
-    for (auto& info : options) {
-      std::cout << "Try to listen on " << info << std::endl;
-      try {
-        auto l = std::make_unique<net::socket>(info, 10);
-        std::cout << "  Listening: " << *l << std::endl;
-        listeners.push_back(std::move(l));
-        
-      } catch (std::runtime_error& ex) {
-        std::cout << "  Skipping: " << ex.what() << std::endl;
-      }
-    }
-  }
-
-  {
-    // In case of no dual-stack: Try to manually bind to IPv4
-    net::address_options options(net::IPv4, net::TCP, host, port);
-    for (auto& info : options) {
-      std::cout << "Try to listen on " << info << std::endl;
-      try {
-        auto l = std::make_unique<net::socket>(info, 10);
+        auto l = std::make_unique<socket_type>(info, 10, args...);
         std::cout << "  Listening: " << *l << std::endl;
         listeners.push_back(std::move(l));
       } catch (std::runtime_error& ex) {
@@ -385,17 +379,27 @@ int main(int argc, char const* argv[]) {
   crypto::config tlsConfig(cert, key);
 
   event::scheduler s;
-  auto httpsListeners = createListeners(nullptr, "443", tlsConfig);
-  auto httpListeners = createListeners(nullptr, "80");
+  auto httpsListeners = createListeners<net::tls_socket>(nullptr, "443", tlsConfig);
+  auto httpListeners = createListeners<net::socket>(nullptr, "80");
+  auto controlListeners = createListeners<net::socket>(nullptr, "6789");
 
   fs::cache files(path);
 
   std::vector<coro::sync_task<void>> tasks;
   for (auto& listener : httpsListeners) {
-    s.execute(httpsAcceptor(s, *listener, files));
+    s.execute(acceptor(s, *listener, [&s, &files](auto client) {
+      return httpsServer(s, std::move(client), files);
+    }));
   }
   for (auto& listener : httpListeners) {
-    s.execute(httpAcceptor(s, *listener));
+    s.execute(acceptor(s, *listener, [&s](auto client) {
+      return httpToHttpsForwarder(s, std::move(client));
+    }));
+  }
+  for (auto& listener : controlListeners) {
+    s.execute(acceptor(s, *listener, [&s](auto client) {
+      return controlHandler(s, std::move(client));
+    }));
   }
   s.run();
   

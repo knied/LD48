@@ -180,7 +180,11 @@ public:
       }
       return task.done();
     };
-    _tasks.erase(std::remove_if(_tasks.begin(), _tasks.end(), done), _tasks.end());
+    _tasks.erase(std::remove_if(_tasks.begin(), _tasks.end(), done),
+                 _tasks.end());
+  }
+  void trigger_shutdown_from_task() {
+    ::ev_break(_loop, EVBREAK_ONE);
   }
 private:
   void shutdown() {

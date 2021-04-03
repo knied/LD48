@@ -78,7 +78,7 @@ void main() {\n\
 precision mediump float;\n\
 varying vec4 v_color;\n\
 void main() {\n\
-  gl_FragColor = v_color;\n\
+  gl_FragColor = vec4(0.0, 1.0, 0.0, 1.0);\n\
 }\n", {"a_position", "a_color"}, {"u_mat"}));
 
     {

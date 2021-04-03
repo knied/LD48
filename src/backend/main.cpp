@@ -30,7 +30,7 @@ generateHttpErrorResponse(http::response::status_code code,
   response.set_status_code(code);
   response.get_headers().insert(std::make_pair("Connection", "close"));
   std::string url = "/" + std::to_string((int)code) + ".html";
-  auto error = files.find(url, true);
+  auto error = files.find(url);
   if (error) {
     response.set_content(error);
   }
@@ -119,7 +119,7 @@ generateResponse(http::request const& request,
     if (uri == "/") {
       uri = "/index.html";
     }
-    auto content = files.find(uri, true);
+    auto content = files.find(uri);
     if (!content) {
       return generateHttpErrorResponse(
         http::response::status_code::NOT_FOUND, files, response);
@@ -183,13 +183,14 @@ private:
   std::string _context;
 };
 
-using secure_channel = com::channel<event::scheduler, net::tls_socket>;
+template<typename socket_type>
 static coro::sync_task<void>
-httpsServer(event::scheduler& s,
-            net::tls_socket client,
-            fs::cache const& files) {
+httpServer(event::scheduler& s,
+           socket_type client,
+           fs::cache const& files) {
+  using channel_type = com::channel<event::scheduler, socket_type>;
   scoped_logger logger(client, "https");
-  secure_channel channel(s, client);
+  channel_type channel(s, client);
   auto chars = channel.async_char_stream();
   ConnectionStatus status = ConnectionStatus::Ok;
   try {
@@ -228,8 +229,8 @@ httpsServer(event::scheduler& s,
 
 using open_channel = com::channel<event::scheduler, net::socket>;
 static coro::sync_task<void>
-httpToHttpsForwarder(event::scheduler& s,
-                     net::socket client) {
+httpsForwarder(event::scheduler& s,
+               net::socket client) {
   scoped_logger logger(client, "http");
   open_channel channel(s, client);
   auto chars = channel.async_char_stream();
@@ -302,7 +303,7 @@ controlHandler(event::scheduler& s,
 
 template<typename socket_type, typename handler_type>
 coro::sync_task<void>
-acceptor(event::scheduler& s, socket_type& listener,
+acceptor(event::scheduler& s, socket_type listener,
          handler_type handler) {
   while (true) {
     auto client = co_await listener.async_accept(s);
@@ -317,16 +318,15 @@ acceptor(event::scheduler& s, socket_type& listener,
 
 template<typename socket_type, typename... arg_types>
 auto createListeners(char const* host, char const* port, arg_types&& ...args) {
-  std::vector<std::unique_ptr<socket_type>> listeners;
-
+  std::vector<socket_type> listeners;
   {
     // First try to bind to IPv6
     net::address_options options(net::IPv6, net::TCP, host, port);
     for (auto& info : options) {
       std::cout << "Try to listen on " << info << std::endl;
       try {
-        auto l = std::make_unique<socket_type>(info, 10, args...);
-        std::cout << "  Listening: " << *l << std::endl;
+        auto l = socket_type(info, 10, args...);
+        std::cout << "  Listening: " << l << std::endl;
         listeners.push_back(std::move(l));
         
       } catch (std::runtime_error& ex) {
@@ -334,22 +334,20 @@ auto createListeners(char const* host, char const* port, arg_types&& ...args) {
       }
     }
   }
-
   {
     // In case of no dual-stack: Try to manually bind to IPv4
     net::address_options options(net::IPv4, net::TCP, host, port);
     for (auto& info : options) {
       std::cout << "Try to listen on " << info << std::endl;
       try {
-        auto l = std::make_unique<socket_type>(info, 10, args...);
-        std::cout << "  Listening: " << *l << std::endl;
+        auto l = socket_type(info, 10, args...);
+        std::cout << "  Listening: " << l << std::endl;
         listeners.push_back(std::move(l));
       } catch (std::runtime_error& ex) {
         std::cout << "  Skipping: " << ex.what() << std::endl;
       }
     }
   }
-
   return listeners;
 }
 
@@ -358,6 +356,7 @@ int main(int argc, char const* argv[]) {
   for (int i = 0; i < argc; ++i) {
     std::cout << "argv[" << i << "] = \"" << argv[i] << "\"" << std::endl;
   }
+  bool devMode = false;
   std::string path(".");
   std::string cert;
   std::string key;
@@ -374,34 +373,46 @@ int main(int argc, char const* argv[]) {
       assert(i+1 < argc);
       key = std::string(argv[++i]);
     }
+    if (std::string(argv[i]) == "--dev") {
+      devMode = true;
+    }
   }
-
-  crypto::config tlsConfig(cert, key);
 
   event::scheduler s;
-  auto httpsListeners = createListeners<net::tls_socket>(nullptr, "443", tlsConfig);
-  auto httpListeners = createListeners<net::socket>(nullptr, "80");
-  auto controlListeners = createListeners<net::socket>(nullptr, "6789");
-
-  fs::cache files(path);
-
   std::vector<coro::sync_task<void>> tasks;
-  for (auto& listener : httpsListeners) {
-    s.execute(acceptor(s, *listener, [&s, &files](auto client) {
-      return httpsServer(s, std::move(client), files);
-    }));
+  fs::cache files(path, devMode);
+  auto controlListeners = createListeners<net::socket>(nullptr, "6789");
+  if (devMode) {
+    auto httpListeners = createListeners<net::socket>(nullptr, "8080");
+    for (auto& listener : httpListeners) {
+      s.execute(acceptor(s, std::move(listener), [&s, &files](auto client) {
+        return httpServer(s, std::move(client), files);
+      }));
+    }
+    for (auto& listener : controlListeners) {
+      s.execute(acceptor(s, std::move(listener), [&s](auto client) {
+        return controlHandler(s, std::move(client));
+      }));
+    }
+  } else {
+    crypto::config tlsConfig(cert, key);
+    auto httpsListeners = createListeners<net::tls_socket>(nullptr, "443", tlsConfig);
+    auto httpListeners = createListeners<net::socket>(nullptr, "80");
+    for (auto& listener : httpsListeners) {
+      s.execute(acceptor(s, std::move(listener), [&s, &files](auto client) {
+        return httpServer(s, std::move(client), files);
+      }));
+    }
+    for (auto& listener : httpListeners) {
+      s.execute(acceptor(s, std::move(listener), [&s](auto client) {
+        return httpsForwarder(s, std::move(client));
+      }));
+    }
+    for (auto& listener : controlListeners) {
+      s.execute(acceptor(s, std::move(listener), [&s](auto client) {
+        return controlHandler(s, std::move(client));
+      }));
+    }
   }
-  for (auto& listener : httpListeners) {
-    s.execute(acceptor(s, *listener, [&s](auto client) {
-      return httpToHttpsForwarder(s, std::move(client));
-    }));
-  }
-  for (auto& listener : controlListeners) {
-    s.execute(acceptor(s, *listener, [&s](auto client) {
-      return controlHandler(s, std::move(client));
-    }));
-  }
-  s.run();
-  
-  return 0;
+  return s.run();
 }

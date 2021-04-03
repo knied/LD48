@@ -154,8 +154,9 @@ public:
     _tasks.push_back(signal_handler(*this, SIGTERM));
     _tasks.back().start().then(_shutdown_handler);
   }
-  void run() {
+  int run() {
     ::ev_run(_loop, 0);
+    return 0;
   }
   /*void run_once() {
     ::ev_run(_loop, EVRUN_ONCE);

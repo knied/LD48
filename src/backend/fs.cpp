@@ -77,7 +77,8 @@ void resource::reload() {
   }
 }
 
-cache::cache(std::string const& root) {
+cache::cache(std::string const& root, bool reload)
+  : mReload(reload) {
   auto names = readWhitelist(root + "/whitelist.ini");
   for (auto name : names) {
     auto location = "/" + name;

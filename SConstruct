@@ -24,18 +24,6 @@ if not 'WASI_SYSROOT' in os.environ:
     print("Error: WASI_SYSROOT needs to point to a precompiled wasi sysroot")
     Exit(1)
 env['WASI_SYSROOT'] = os.environ['WASI_SYSROOT']
-if GetOption('run'):
-    if not 'SERVER_CERT' in os.environ:
-        print("Error: SERVER_CERT needs to point to a valid certificate file")
-        Exit(1)
-    if not 'SERVER_KEY' in os.environ:
-        print("Error: SERVER_KEY needs to point to a valid private key file")
-        Exit(1)
-    env['SERVER_CERT'] = os.environ['SERVER_CERT']
-    env['SERVER_KEY'] = os.environ['SERVER_KEY']
-else:
-    env['SERVER_CERT'] = ''
-    env['SERVER_KEY'] = ''
 
 env.Append(CXXFLAGS = ['-std=c++2a', '-fcoroutines-ts',
                        '-Wall', '-Wextra', '-Wc++2a-compat', '-Werror'],

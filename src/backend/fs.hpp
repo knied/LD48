@@ -46,20 +46,20 @@ class cache final {
 public:
   using cache_entries = std::map<std::string, std::unique_ptr<resource>>;
 
-  cache(std::string const& root);
+  cache(std::string const& root, bool reload);
   cache(cache const&) = delete;
   cache(cache&&) = delete;
   cache& operator = (cache const&) = delete;
   cache& operator = (cache&&) = delete;
 
   resource const*
-  find(std::string const& name, bool may_reload = false) const {
+  find(std::string const& name) const {
     auto it = mEntries.find(name);
     if (it == mEntries.end()) {
       return nullptr;
     }
     auto r = it->second.get();
-    if (may_reload) {
+    if (mReload) {
       r->reload();
     }
     return r;
@@ -70,6 +70,7 @@ public:
 
 private:
   cache_entries mEntries;
+  bool mReload;
 };
 
 } // fs

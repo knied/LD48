@@ -49,7 +49,7 @@ entry_gl_type(mth::matrix<T, R, C> const&) noexcept {
 }
 
 struct vertex { vec3 pos; vec4 color; };
-struct uniform { vec3 color; mat4 mat; };
+struct uniform { mat4 mat; };
 
 static std::vector<gl::attribute_def>
 vertex_defs() {
@@ -78,7 +78,7 @@ void main() {\n\
 precision mediump float;\n\
 varying vec4 v_color;\n\
 void main() {\n\
-  gl_FragColor = vec4(0.0, 1.0, 0.0, 1.0);\n\
+  gl_FragColor = v_color;\n\
 }\n", {"a_position", "a_color"}, {"u_mat"}));
 
     {
@@ -95,7 +95,7 @@ void main() {\n\
 
     {
       std::vector<gl::uniform_def> defs {
-        { "u_color", gl::UNIFORM_VF3, offsetof(uniform, color) }
+        { "u_mat", gl::UNIFORM_MF4, offsetof(uniform, mat) }
       };
       mUniformBinding = std::make_unique<gl::uniform_binding>(mCtx, mPipeline.get(), sizeof(uniform), defs);
     }
@@ -127,7 +127,6 @@ void main() {\n\
     auto mvp = projection * view * model;
     
     uniform u{
-      vec3{ 0.8f, 0.2f, 0.2f },
       mth::transpose(mvp)
     };
     mCommandBuffer.set_uniforms(mUniformBinding.get(), u);

@@ -82,12 +82,32 @@ void main() {\n\
 }\n", {"a_position", "a_color"}, {"u_mat"}));
 
     {
+      vec4 red{ 1.0f, 0.0f, 0.0f, 1.0f };
+      vec4 green{ 0.0f, 1.0f, 0.0f, 1.0f };
+      vec4 blue{ 0.0f, 0.0f, 1.0f, 1.0f };
+      vec4 yellow{ 1.0f, 1.0f, 0.0f, 1.0f };
+      vec4 cyan{ 0.0f, 1.0f, 1.0f, 1.0f };
+      vec4 pink{ 1.0f, 0.0f, 1.0f, 1.0f };
       std::vector<vertex> vd {
-        { vec3{ -1.0f, -1.0f, 0.0f }, vec4{ 1.0f, 0.0f, 0.0f, 1.0f } },
-        { vec3{ 1.0f, -1.0f, 0.0f }, vec4{ 0.0f, 1.0f, 0.0f, 1.0f } },
-        { vec3{ 0.0f, 1.0f, 0.0f }, vec4{ 0.0f, 0.0f, 1.0f, 1.0f } }
+        // front
+        { vec3{ -1.0f, -1.0f, -1.0f }, red },
+        { vec3{ 1.0f, -1.0f, -1.0f }, red },
+        { vec3{ 1.0f, 1.0f, -1.0f }, red },
+        { vec3{ -1.0f, -1.0f, -1.0f }, red },
+        { vec3{ 1.0f, 1.0f, -1.0f }, red },
+        { vec3{ -1.0f, 1.0f, -1.0f }, red },
+        // back
+        { vec3{ -1.0f, -1.0f, 1.0f }, green },
+        { vec3{ 1.0f, 1.0f, 1.0f }, green },
+        { vec3{ 1.0f, -1.0f, 1.0f }, green },
+        { vec3{ -1.0f, -1.0f, 1.0f }, green },
+        { vec3{ -1.0f, 1.0f, 1.0f }, green },
+        { vec3{ 1.0f, 1.0f, 1.0f }, green },
       };
-      std::vector<unsigned int> id { 0, 1, 2 };
+      std::vector<unsigned int> id;
+      for (unsigned int i = 0; i < vd.size(); ++i) {
+        id.push_back(i);
+      }
       mMesh = std::make_unique<gl::mesh>(mCtx, gl::PRIMITIVE_TRIANGLES, vd, id, vertex_defs());
     }
 

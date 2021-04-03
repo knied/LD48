@@ -103,6 +103,34 @@ void main() {\n\
         { vec3{ -1.0f, -1.0f, 1.0f }, green },
         { vec3{ -1.0f, 1.0f, 1.0f }, green },
         { vec3{ 1.0f, 1.0f, 1.0f }, green },
+        // top
+        { vec3{ -1.0f, 1.0f, -1.0f }, blue },
+        { vec3{ 1.0f, 1.0f, -1.0f }, blue },
+        { vec3{ 1.0f, 1.0f, 1.0f }, blue },
+        { vec3{ -1.0f, 1.0f, -1.0f }, blue },
+        { vec3{ 1.0f, 1.0f, 1.0f }, blue },
+        { vec3{ -1.0f, 1.0f, 1.0f }, blue },
+        // bottom
+        { vec3{ -1.0f, -1.0f, -1.0f }, yellow },
+        { vec3{ 1.0f, -1.0f, 1.0f }, yellow },
+        { vec3{ 1.0f, -1.0f, -1.0f }, yellow },
+        { vec3{ -1.0f, -1.0f, -1.0f }, yellow },
+        { vec3{ -1.0f, -1.0f, 1.0f }, yellow },
+        { vec3{ 1.0f, -1.0f, 1.0f }, yellow },
+        // left
+        { vec3{ -1.0f, -1.0f, 1.0f }, cyan },
+        { vec3{ -1.0f, -1.0f, -1.0f }, cyan },
+        { vec3{ -1.0f, 1.0f, -1.0f }, cyan },
+        { vec3{ -1.0f, -1.0f, 1.0f }, cyan },
+        { vec3{ -1.0f, 1.0f, -1.0f }, cyan },
+        { vec3{ -1.0f, 1.0f, 1.0f }, cyan },
+        // right
+        { vec3{ 1.0f, -1.0f, 1.0f }, pink },
+        { vec3{ 1.0f, 1.0f, -1.0f }, pink },
+        { vec3{ 1.0f, -1.0f, -1.0f }, pink },
+        { vec3{ 1.0f, -1.0f, 1.0f }, pink },
+        { vec3{ 1.0f, 1.0f, 1.0f }, pink },
+        { vec3{ 1.0f, 1.0f, -1.0f }, pink },
       };
       std::vector<unsigned int> id;
       for (unsigned int i = 0; i < vd.size(); ++i) {

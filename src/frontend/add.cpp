@@ -70,13 +70,15 @@ public:
 attribute vec4 a_position;\n\
 attribute vec4 a_color;\n\
 uniform mat4 u_mat;\n\
+varying vec4 v_color;\n\
 void main() {\n\
   gl_Position = u_mat * a_position;\n\
-  gl_Color = a_color;\n\
+  v_color = a_color;\n\
 }\n","\
 precision mediump float;\n\
+varying vec4 v_color;\n\
 void main() {\n\
-  gl_FragColor = gl_Color;\n\
+  gl_FragColor = v_color;\n\
 }\n", {"a_position", "a_color"}, {"u_mat"}));
 
     {

@@ -10,6 +10,7 @@ def builder_frontend(target, source, env):
     index.write("<html>\n")
     index.write("  <head>\n")
     index.write("    <title>Game</title>\n")
+    index.write("<meta name='viewport' content='width=device-width,initial-scale=1,maximum-scale=1,user-scalable=0'/>")
     
     whitelist.write(os.path.basename(target[1].abspath) + '\n')
     for s in source:

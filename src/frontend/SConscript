@@ -33,7 +33,7 @@ bld = Builder(action = builder_frontend,
               emitter = emitter_frontend)
 frontend_env.Append(BUILDERS = {'Frontend' :  bld})
 
-wasm_sources = ['add.cpp', 'websocket.cpp', 'graphics.cpp']
+wasm_sources = ['add.cpp', 'input.cpp', 'websocket.cpp', 'graphics.cpp']
 wasm = frontend_env.Wasm('add.wasm', wasm_sources)
 
 static_sources = ['main.js', 'main.css', '404.html'] + wasm

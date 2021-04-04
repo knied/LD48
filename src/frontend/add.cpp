@@ -1,4 +1,5 @@
 #include "wasm.h"
+#include "input.hpp"
 #include "websocket.hpp"
 #include "graphics.hpp"
 #include <stdio.h>
@@ -68,7 +69,9 @@ struct InputBuffer {
 class Game final {
 public:
   Game(gl::context ctx)
-    : mCtx(ctx), mCommandBuffer(mCtx) {
+    : mKey("KeyA")
+    , mCtx(ctx)
+    , mCommandBuffer(mCtx) {
     printf("C Game\n");
     fflush(stdout);
     mPipeline = std::unique_ptr<gl::pipeline>(new gl::pipeline(mCtx, "\
@@ -157,13 +160,18 @@ void main() {\n\
     printf("D Game\n");
     fflush(stdout);
   }
-  int render(float dt, unsigned int width, unsigned int height,
-             InputBuffer const* buffer) {
-    (void)dt;
-    (void)buffer;
+  int render(float dt, unsigned int width, unsigned int height) {
     //printf("Game::render %f %u %u\n", dt, width, height);
     //printf("pointer: %d,%d\n", buffer->movementX, buffer->movementY);
     //fflush(stdout);
+    if (mMouse.mousedownMain() > 0) {
+      printf("mousedown: %d,%d\n", mMouse.clientX(), mMouse.clientY());
+      fflush(stdout);
+    }
+    if (mKey.keydown() > 0) {
+      printf("keydown\n");
+      fflush(stdout);
+    }
     mCommandBuffer.set_viewport(0, 0, width, height);
     mCommandBuffer.set_clear_color(0.1f, 0.1f, 0.1f, 1.0f);
     mCommandBuffer.clear(gl::CLEAR_COLOR);
@@ -179,11 +187,13 @@ void main() {\n\
     auto model = mth::identity<float,4,4>();
     
     static auto animX = 0.0f;
-    animX += 0.001f * (float)buffer->movementX;
+    //animX += 0.001f * (float)buffer->movementX;
+    animX += 0.1f * dt;
     while (animX > 1.0f) animX -= 1.0f;
 
     static auto animY = 0.0f;
-    animY += 0.001f * (float)buffer->movementY;
+    //animY += 0.001f * (float)buffer->movementY;
+    animY += 0.2f * dt;
     while (animY > 1.0f) animY -= 1.0f;
     
     model = model * mth::rotation(mth::from_axis(vec3{0.0f,1.0f,0.0f}, 2.0f * animX * (float)mth::pi));
@@ -199,6 +209,8 @@ void main() {\n\
     return 0;
   }
 private:
+  input::mouse_observer mMouse;
+  input::key_observer mKey;
   gl::context mCtx;
   std::unique_ptr<gl::pipeline> mPipeline;
   std::unique_ptr<gl::mesh> mMesh;
@@ -216,9 +228,8 @@ void release(void* udata) {
   delete reinterpret_cast<Game*>(udata);
 }
 WASM_EXPORT("render")
-int render(void* udata, float dt, unsigned int width, unsigned int height,
-           InputBuffer const* buffer) {
-  return reinterpret_cast<Game*>(udata)->render(dt, width, height, buffer);
+int render(void* udata, float dt, unsigned int width, unsigned int height) {
+  return reinterpret_cast<Game*>(udata)->render(dt, width, height);
 }
 
 WebSocket* gSocket = nullptr;

@@ -155,14 +155,6 @@ function MeshBinding(gl, mesh, pipeline) {
     }
 }
 
-function draw(gl, meshBinding) {
-    const mesh = meshBinding.mesh;
-    gl.bindVertexArray(meshBinding.vao);
-    const offset = 0;
-    gl.drawElements(mesh.primitiveType, mesh.count,
-                    gl.UNSIGNED_INT, offset);
-}
-
 function applyUniforms(gl, binding, view) {
     for (const i in binding.slots) {
         const slot = binding.slots[i];
@@ -326,49 +318,172 @@ function RefHeap(size) {
     }
 }
 
-function InputBuffer(wasm, heap, canvas) {
+// Touch events are a bit more complicated, as they track multiple fingers and there is no movementX, movementY
+/*canvas.addEventListener('touchmove', function(e) {
+//console.log('touchmove', e);
+const touch = e.touches[0];
+clientX = touch.clientX;
+clientY = touch.clientY;
+});*/
+
+/*canvas.requestPointerLock = canvas.requestPointerLock;
+  canvas.requestPointerLock();*/
+
+function MouseInputObserver(view) {
+    this.view = view;
+}
+function MouseInputTracer(canvas, ) {
     let movementX = 0;
     let movementY = 0;
     let clientX = 0;
     let clientY = 0;
-    const size = 16;
-    this.ptr = wasm.exports.allocate_buffer(size);
-    canvas.addEventListener('mousemove', function(e) {
+    let mousedownMain = 0;
+    let mouseupMain = 0;
+    let mousedownSecond = 0;
+    let mouseupSecond = 0;
+    const mousemoveFn = function(e) {
         //console.log('mousemove', e);
         movementX += e.movementX;
         movementY += e.movementY;
         clientX = e.clientX;
         clientY = e.clientY;
-    });
-    canvas.addEventListener('mousedown', function(e) {
-        console.log('mousedown', e);
-        /*canvas.requestPointerLock = canvas.requestPointerLock;
-        canvas.requestPointerLock();*/
-    });
-    document.addEventListener('keydown', function(e) {
-        console.log('keydown', e);
-    });
-    document.addEventListener('keyup', function(e) {
-        console.log('keyup', e);
-    });
+    };
+    const mousedownFn = function(e) {
+        //console.log('mousedown', e);
+        if (e.button == 0) {
+            mousedownMain++;
+        }
+        if (e.button == 2) {
+            mousedownSecond++;
+        }
+    };
+    const mouseupFn = function(e) {
+        //console.log('mousedown', e);
+        if (e.button == 0) {
+            mouseupMain++;
+        }
+        if (e.button == 2) {
+            mouseupSecond++;
+        }
+    };
+    let observers = [];
+    this.addObserver = function(observer) {
+        if (observers.length === 0) {
+            console.log('First MouseInputObserver added');
+            canvas.addEventListener('mousemove', mousemoveFn);
+            canvas.addEventListener('mousedown', mousedownFn);
+            canvas.addEventListener('mouseup', mouseupFn);
+        }
+        observers.push(observer);
+    }
+    this.removeObserver = function(observer) {
+        const idx = observers.indexOf(observer);
+        if (idx > -1) {
+            observers.splice(idx, 1);
+        } else {
+            throw 'Trying to remove an unknown observer.'
+        }
+        if (observers.length == 0) {
+            console.log('Last MouseInputObserver removed');
+            canvas.removeEventListener('mousemove', mousemoveFn);
+            canvas.removeEventListener('mousedown', mousedownFn);
+            canvas.removeEventListener('mouseup', mouseupFn);
+        }
+    }
     this.swap = function() {
-        const view = new DataView(heap.buffer, this.ptr, size);
-        view.setInt32(0, movementX, true);
-        view.setInt32(4, movementY, true);
-        view.setInt32(8, clientX, true);
-        view.setInt32(12, clientY, true);
+        for (const observer of observers) {
+            const view = observer.view;
+            view.setInt32(0, movementX, true);
+            view.setInt32(4, movementY, true);
+            view.setInt32(8, clientX, true);
+            view.setInt32(12, clientY, true);
+            view.setInt32(16, mousedownMain, true);
+            view.setInt32(20, mouseupMain, true);
+            view.setInt32(24, mousedownSecond, true);
+            view.setInt32(28, mouseupSecond, true);
+        }
         movementX = 0;
         movementY = 0;
+        mousedownMain = 0;
+        mouseupMain = 0;
+        mousedownSecond = 0;
+        mouseupSecond = 0;
     };
 }
 
-function main(refHeap, wasm, heap) {
+function KeyboardInputObserver(view, code) {
+    this.code = code;
+    this.view = view;
+}
+function KeyboardInputTracer() {
+    let tracers = {};
+    const keydownFn = function(e) {
+        //console.log('keydown', e);
+        const tracer = tracers[e.code];
+        if (tracer !== undefined) {
+            tracer.keydown++;
+        }
+    };
+    const keyupFn = function(e) {
+        //console.log('keyup', e);
+        const tracer = tracers[e.code];
+        if (tracer !== undefined) {
+            tracer.keyup++;
+        }
+    };
+    this.addObserver = function(observer) {
+        const code = observer.code;
+        console.log(tracers.length);
+        if (Object.keys(tracers).length === 0) {
+            console.log('First KeyboardInputObserver added');
+            document.addEventListener('keydown', keydownFn);
+            document.addEventListener('keyup', keyupFn);
+        }
+        if (tracers[code] === undefined) {
+            tracers[code] = { keyup: 0, keydown: 0, observers: []};
+        }
+        tracers[code].observers.push(observer);
+    }
+    this.removeObserver = function(observer) {
+        const code = observer.code;
+        if (tracers[code] === undefined) {
+            throw 'Trying to remove an unknown observer.'
+        }
+        const idx = tracers[code].observers.indexOf(observer);
+        if (idx > -1) {
+            tracers[code].observers.splice(idx, 1);
+        } else {
+            throw 'Trying to remove an unknown observer.'
+        }
+        if (tracers[code].observers.length === 0) {
+            delete tracers[code];
+        }
+        if (Object.keys(tracers).length === 0) {
+            console.log('Last KeyboardInputObserver removed');
+            document.removeEventListener('keydown', keydownFn);
+            document.removeEventListener('keyup', keyupFn);
+        }
+    }
+    this.swap = function() {
+        for (const code in tracers) {
+            const tracer = tracers[code];
+            const keydown = tracer.keydown;
+            const keyup = tracer.keyup;
+            for (const observer of tracer.observers) {
+                const view = observer.view;
+                view.setInt32(0, keydown, true);
+                view.setInt32(4, keyup, true);
+            }
+            tracer.keydown = 0;
+            tracer.keyup = 0;
+        }
+    };
+}
+
+document.addEventListener("DOMContentLoaded", function(event) {
     const canvas = document.body.appendChild(document.createElement('canvas'));
-    const inputBuffer = new InputBuffer(wasm, heap, canvas);
     gl = canvas.getContext('webgl2', {antialias: false, powerPreference: 'high-performance'});
     if (!gl) {
-        //throw 'WebGL2 is not supported by your browser :(';
-        // TODO: Fall back to WebGL 1
         gl = canvas.getContext('webgl');
         if (!gl) {
             throw 'WebGL is not supported by your browser :(';
@@ -383,40 +498,8 @@ function main(refHeap, wasm, heap) {
             throw 'The WebGL extension OES_vertex_array_object is not supported by your browser :(';
         }
     }
-
-    gl.enable(gl.DEPTH_TEST);
-    const ctx = refHeap.put(gl);
-    const udata = wasm.exports.init(ctx);
-    let prevTime;
-    let anim = {
-        update: function(now) {
-            var width = gl.canvas.clientWidth * devicePixelRatio;
-            var height = gl.canvas.clientHeight * devicePixelRatio;
-            if (gl.canvas.width != width ||
-                gl.canvas.height != height) {
-                gl.canvas.width = width;
-                gl.canvas.height = height;
-            }
-            inputBuffer.swap()
-            const dt = prevTime !== undefined ? (now - prevTime) / 1000.0 : 0.0;
-            prevTime = now;
-            const result = wasm.exports.render(udata, dt,
-                                               gl.drawingBufferWidth,
-                                               gl.drawingBufferHeight,
-                                               inputBuffer.ptr);
-            if (result === 0) {
-                requestAnimationFrame(this.update);
-            } else {
-                wasm.exports.release(udata);
-                refHeap.del(ctx);
-            }
-        }
-    }
-    anim.update = anim.update.bind(anim);
-    requestAnimationFrame(anim.update);
-}
-
-document.addEventListener("DOMContentLoaded", function(event) {
+    const mouseInputTracer = new MouseInputTracer(canvas);
+    const keyboardInputTracer = new KeyboardInputTracer();
     let memory = new WebAssembly.Memory({ initial: 8 });
     let heap = new Uint8Array(memory.buffer);
     let refHeap = new RefHeap(32);
@@ -444,8 +527,35 @@ document.addEventListener("DOMContentLoaded", function(event) {
     let wasm_del_buffer = function(buffer) {
         wasm.exports.free_buffer(buffer.ptr);
     }
-    
-    let wasi_polyfills = {
+
+    const input_module = {
+        create_mouse_observer: function(buffer_ptr) {
+            const view = new DataView(heap.buffer, buffer_ptr);
+            const observer = new MouseInputObserver(view);
+            console.log('create_mouse_observer');
+            mouseInputTracer.addObserver(observer);
+            return refHeap.put(observer);
+        },
+        destroy_mouse_observer: function(id) {
+            const observer = refHeap.get(id);
+            mouseInputTracer.removeObserver(observer);
+            refHeap.del(id);
+        },
+        create_key_observer: function(buffer_ptr, code_ptr) {
+            const view = new DataView(heap.buffer, buffer_ptr);
+            const code = wasm_read_c_str(code_ptr);
+            console.log('create_key_observer', code);
+            const observer = new KeyboardInputObserver(view, code);
+            keyboardInputTracer.addObserver(observer);
+            return refHeap.put(observer);
+        },
+        destroy_key_observer: function(id) {
+            const observer = refHeap.get(id);
+            keyboardInputTracer.removeObserver(observer);
+            refHeap.del(id);
+        }
+    };
+    const wasi_module = {
         environ_get: function(environ, environ_buf) {
             console.log("environ_get");
             return 0;
@@ -510,7 +620,7 @@ document.addEventListener("DOMContentLoaded", function(event) {
             console.log("proc_exit",rval);
         }
     };
-    let websocket_module = {
+    const websocket_module = {
         open: function(ptr, context) {
             let route = wasm_read_c_str(ptr);
             let socket = new WebSocket("wss://" + location.host + route);
@@ -544,7 +654,7 @@ document.addEventListener("DOMContentLoaded", function(event) {
             socket.send(wasm_read_buffer(buffer, size));
         }
     };
-    let gl_module = {
+    const gl_module = {
         create_pipeline: function(ctx, vs, fs, attv, attc, univ, unic) {
             console.log('create_pipeline');
             const gl = refHeap.get(ctx);
@@ -643,11 +753,12 @@ document.addEventListener("DOMContentLoaded", function(event) {
             executeCommands(gl, refHeap, view);
         }
     };
-    let importObject = {
+    const importObject = {
         env: { memory },
         websocket: websocket_module,
+        input: input_module,
         gl: gl_module,
-        wasi_snapshot_preview1: wasi_polyfills
+        wasi_snapshot_preview1: wasi_module
     };
     console.log(importObject);
     fetch('add.wasm')
@@ -655,6 +766,35 @@ document.addEventListener("DOMContentLoaded", function(event) {
         .then(bytes => WebAssembly.instantiate(bytes, importObject))
         .then(results => {
             wasm = results.instance;
-            main(refHeap, wasm, heap);
+            gl.enable(gl.DEPTH_TEST);
+            const ctx = refHeap.put(gl);
+            const udata = wasm.exports.init(ctx);
+            let prevTime;
+            let anim = {
+                update: function(now) {
+                    var width = gl.canvas.clientWidth * devicePixelRatio;
+                    var height = gl.canvas.clientHeight * devicePixelRatio;
+                    if (gl.canvas.width != width ||
+                        gl.canvas.height != height) {
+                        gl.canvas.width = width;
+                        gl.canvas.height = height;
+                    }
+                    mouseInputTracer.swap();
+                    keyboardInputTracer.swap();
+                    const dt = prevTime !== undefined ? (now - prevTime) / 1000.0 : 0.0;
+                    prevTime = now;
+                    const result = wasm.exports.render(udata, dt,
+                                                       gl.drawingBufferWidth,
+                                                       gl.drawingBufferHeight);
+                    if (result === 0) {
+                        requestAnimationFrame(this.update);
+                    } else {
+                        wasm.exports.release(udata);
+                        refHeap.del(ctx);
+                    }
+                }
+            }
+            anim.update = anim.update.bind(anim);
+            requestAnimationFrame(anim.update);
         });
 });

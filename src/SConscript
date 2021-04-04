@@ -3,7 +3,5 @@ Import('env')
 backend = SConscript('backend/SConscript')
 frontend = SConscript('frontend/SConscript')
 
-env.RunProgram(backend + frontend,
-               backend, ['--root', str(env.Dir(env['PREFIX'] + '/web')),
-                         '--cert', env['SERVER_CERT'],
-                         '--key', env['SERVER_KEY']])
+env.RunProgram('dev_server', backend + frontend,
+               backend, ['--dev', '--root', str(env.Dir(env['PREFIX'] + '/web'))])

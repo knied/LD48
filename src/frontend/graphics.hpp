@@ -52,6 +52,19 @@ enum attribute_type {
   ATTRIBUTE_FLOAT = 1,
   ATTRIBUTE_UNSIGNED_BYTE
 };
+template<typename T>
+constexpr inline attribute_type
+atype() noexcept;
+template<>
+constexpr inline attribute_type
+atype<float>() noexcept{
+  return attribute_type::ATTRIBUTE_FLOAT;
+}
+template<>
+constexpr inline attribute_type
+atype<unsigned char>() noexcept{
+  return attribute_type::ATTRIBUTE_UNSIGNED_BYTE;
+}
 struct attribute_def {
   char const* name;
   unsigned int stride;

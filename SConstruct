@@ -8,7 +8,7 @@ AddOption('--for_debug', dest='debug', action='store_true', default=False, help=
 #AddOption('--with-assertions', dest='assertions', action='store_true', default=False, help="build with debug symbols")
 #AddOption('--non-optimized', dest='optimize', action='store_false', default=True, help="create non optimized build")
 AddOption('--prefix', dest='prefix', action='store', default='#/install', help="install location")
-AddOption('--run', dest='run', action='store_true', default=False, help="run programs")
+AddOption('--run', dest='run', action='store', default='', help="run programs")
 
 env = Environment(tools = ['default', 'clang', 'clangxx'])
 if not 'HOMEBREW_PREFIX' in os.environ:
@@ -24,18 +24,6 @@ if not 'WASI_SYSROOT' in os.environ:
     print("Error: WASI_SYSROOT needs to point to a precompiled wasi sysroot")
     Exit(1)
 env['WASI_SYSROOT'] = os.environ['WASI_SYSROOT']
-if GetOption('run'):
-    if not 'SERVER_CERT' in os.environ:
-        print("Error: SERVER_CERT needs to point to a valid certificate file")
-        Exit(1)
-    if not 'SERVER_KEY' in os.environ:
-        print("Error: SERVER_KEY needs to point to a valid private key file")
-        Exit(1)
-    env['SERVER_CERT'] = os.environ['SERVER_CERT']
-    env['SERVER_KEY'] = os.environ['SERVER_KEY']
-else:
-    env['SERVER_CERT'] = ''
-    env['SERVER_KEY'] = ''
 
 env.Append(CXXFLAGS = ['-std=c++2a', '-fcoroutines-ts',
                        '-Wall', '-Wextra', '-Wc++2a-compat', '-Werror'],
@@ -55,13 +43,15 @@ env.Alias('install', env['PREFIX'])
 # Methods
 ################################################################################
 
-def RunProgram(self, dependencies, program, args):
-    if GetOption('run'):
+def RunProgram(self, name, dependencies, program, args):
+    if GetOption('run') == name:
         run = self.Command(target = 'output.log',
                            source = [program[0].abspath],
                            action = '$SOURCE %s | tee $TARGET' % (' '.join(args)))
         Depends(run, dependencies)
         self.AlwaysBuild(run)
+        self.Alias('run', run)
+        Default('run')
 AddMethod(Environment, RunProgram)
 
 def Wasm(self, target, sources):

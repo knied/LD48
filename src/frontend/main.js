@@ -105,23 +105,53 @@ function Mesh(gl, vertexData, indexData, primitiveType, attribDefs) {
 function MeshBinding(gl, mesh, pipeline) {
     this.mesh = mesh;
     this.pipeline = pipeline;
-    this.vao = gl.createVertexArray();
-    gl.bindVertexArray(this.vao);
-    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, mesh.ib);
-    gl.bindBuffer(gl.ARRAY_BUFFER, mesh.vb);
-    for (const attribute in pipeline.attribLocs) {
-        const location = pipeline.attribLocs[attribute];
-        const def = mesh.attribDefs[attribute];
-        if (!def) {
-            throw "Missing attribute '" + attribute + "' in mesh.";
+    if (gl.createVertexArray !== undefined) {
+        // WebGL 2
+        this.vao = gl.createVertexArray();
+        gl.bindVertexArray(this.vao);
+        gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, mesh.ib);
+        gl.bindBuffer(gl.ARRAY_BUFFER, mesh.vb);
+        for (const attribute in pipeline.attribLocs) {
+            const location = pipeline.attribLocs[attribute];
+            const def = mesh.attribDefs[attribute];
+            if (!def) {
+                throw "Missing attribute '" + attribute + "' in mesh.";
+            }
+            gl.enableVertexAttribArray(location);
+            gl.vertexAttribPointer(location, def.size,
+                                   def.type, def.normalize,
+                                   def.stride, def.offset);
         }
-        gl.enableVertexAttribArray(location);
-        gl.vertexAttribPointer(location, def.size,
-                               def.type, def.normalize,
-                               def.stride, def.offset);
-    }
-    this.destroy = function() {
-        gl.deleteVertexArray(this.vao);
+        this.use = function() {
+            gl.bindVertexArray(this.vao);
+        }
+        this.destroy = function() {
+            gl.deleteVertexArray(this.vao);
+        }
+    } else {
+        // WebGL 1 fallback
+        const ext = gl.getExtension('OES_vertex_array_object');
+        this.vao = ext.createVertexArrayOES();
+        ext.bindVertexArrayOES(this.vao);
+        gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, mesh.ib);
+        gl.bindBuffer(gl.ARRAY_BUFFER, mesh.vb);
+        for (const attribute in pipeline.attribLocs) {
+            const location = pipeline.attribLocs[attribute];
+            const def = mesh.attribDefs[attribute];
+            if (!def) {
+                throw "Missing attribute '" + attribute + "' in mesh.";
+            }
+            gl.enableVertexAttribArray(location);
+            gl.vertexAttribPointer(location, def.size,
+                                   def.type, def.normalize,
+                                   def.stride, def.offset);
+        }
+        this.use = function() {
+            ext.bindVertexArrayOES(this.vao);
+        }
+        this.destroy = function() {
+            ext.deleteVertexArrayOES(this.vao);
+        }
     }
 }
 
@@ -248,7 +278,7 @@ function executeCommands(gl, refHeap, view) {
             //console.log('COMMAND_SET_MESH');
             const b = view.getUint32(ptr, true); ptr += 4;
             const binding = refHeap.get(b);
-            gl.bindVertexArray(binding.vao);
+            binding.use();
             mesh = binding.mesh;
         } break;
         case COMMAND_DRAW: {
@@ -333,27 +363,29 @@ function InputBuffer(wasm, heap, canvas) {
     };
 }
 
-let game = null;
 function main(refHeap, wasm, heap) {
     const canvas = document.body.appendChild(document.createElement('canvas'));
     const inputBuffer = new InputBuffer(wasm, heap, canvas);
     gl = canvas.getContext('webgl2', {antialias: false, powerPreference: 'high-performance'});
     if (!gl) {
-        throw 'WebGL2 is not supported by your browser :(';
+        //throw 'WebGL2 is not supported by your browser :(';
         // TODO: Fall back to WebGL 1
-        /*gl = canvas.getContext('webgl');
+        gl = canvas.getContext('webgl');
         if (!gl) {
             throw 'WebGL is not supported by your browser :(';
         }
-        const extensions = ['OES_element_index_uint',
-                            'OES_vertex_array_object'];
-        for (const i in extensions) {
-            const extension = gl.getExtension(extensions[i]);
-            if (!extension) {
-                throw 'Missing WebGL extension "' + extensions[i] + '"';
-            }
-        }*/
+
+        OES_element_index_uint = gl.getExtension('OES_element_index_uint');
+        if (!OES_element_index_uint) {
+            throw 'The WebGL extension OES_element_index_uint is not supported by your browser :(';
+        }
+        OES_vertex_array_object = gl.getExtension('OES_vertex_array_object');
+        if (!OES_vertex_array_object) {
+            throw 'The WebGL extension OES_vertex_array_object is not supported by your browser :(';
+        }
     }
+
+    gl.enable(gl.DEPTH_TEST);
     const ctx = refHeap.put(gl);
     const udata = wasm.exports.init(ctx);
     let prevTime;

@@ -5,7 +5,7 @@
 
 ////////////////////////////////////////////////////////////////////////////////
 
-#include "com.hpp"
+#include "coro.hpp"
 #include <string>
 #include <vector>
 #include <map>
@@ -63,13 +63,11 @@ public:
     return mHeaders;
   }
 
+  // TODO: I dont like this API anymore
+  // * Should use com::channel
+  // * Reading a single request is hacky
   static coro::async_generator<http::request>
   stream(coro::async_generator<char>& chars);
-  /*template<typename async_ctx, typename async_io_if>
-  static coro::async_generator<http::request>
-  stream(com::channel<async_ctx, async_io_if>& channel) {
-    return request::stream(channel.async_char_stream());
-    }*/
   
 private:
   method mMethod = method::GET;
@@ -86,6 +84,7 @@ public:
   enum class status_code : int {
     SWITCHING_PROTOCOLS=101,
     OK=200,
+    MOVED_PERMANENTLY=301,
     BAD_REQUEST=400,
     NOT_FOUND=404,
     NOT_IMPLEMENTED=501
@@ -130,6 +129,13 @@ public:
   }
 
   std::vector<char> serialize() const;
+
+  template<typename channel>
+  static coro::task<bool>
+  async_write(channel& c, response const& r) {
+    auto buffer = r.serialize();
+    co_return co_await c.async_write(buffer.data(), buffer.size());
+  }
 
 private:
   status_code mStatusCode = status_code::OK;

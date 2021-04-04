@@ -2,60 +2,55 @@
 #include "http.hpp"
 #include "websocket.hpp"
 #include "fs.hpp"
-#include "Socket.hpp"
+#include "net.hpp"
 
 #include <vector>
 #include <iostream>
+#include <sstream>
+#include <functional>
 
-auto createListeners(char const* host, char const* port, TLSConfig const& tlsConfig) {
-  std::vector<std::unique_ptr<Socket>> listeners;
-
-  {
-    // First try to bind to IPv6
-    AddressOptions options(IPv6, TCP, host, port);
-    for (auto& info : options) {
-      std::cout << "Try to listen on " << info << std::endl;
-      try {
-        listeners.push_back(std::make_unique<Socket>(info, 10, tlsConfig));
-      } catch (std::runtime_error& ex) {
-        std::cout << "  Error: " << ex.what() << std::endl;
-      }
-    }
-  }
-
-  {
-    // In case of no dual-stack: Try to manyally bind to IPv4
-    AddressOptions options(IPv4, TCP, host, port);
-    for (auto& info : options) {
-      std::cout << "Try to listen on " << info << std::endl;
-      try {
-        listeners.push_back(std::make_unique<Socket>(info, 10, tlsConfig));
-      } catch (std::runtime_error& ex) {
-        std::cout << "  Skipping: " << ex.what() << std::endl;
-      }
-    }
-  }
-
-  std::cout << "Listening on:" << std::endl;
-  for (auto& listener : listeners) {
-    std::cout << "  " << *listener << std::endl;
-  }
-
-  return listeners;
+static std::string
+dateAndTime() {
+  // NOTE: Not thread safe!
+  auto now = std::chrono::system_clock::now();
+  auto time = std::chrono::system_clock::to_time_t(now);
+  std::stringstream ss;
+  ss << std::put_time(std::localtime(&time), "%Y-%m-%d %X");
+  return ss.str();
 }
 
-static bool
-websocketHandshake(http::request::headers const& headers,
-                   http::response& response) {
-  auto key = headers.find("Sec-WebSocket-Key");
-  auto version = headers.find("Sec-WebSocket-Version");
+enum class ConnectionStatus {
+  Ok, OkClose, Error, Upgrade
+};
+
+static ConnectionStatus
+generateHttpErrorResponse(http::response::status_code code,
+                          fs::cache const& files,
+                          http::response& response) {
+  response.set_status_code(code);
+  response.get_headers().insert(std::make_pair("Connection", "close"));
+  std::string url = "/" + std::to_string((int)code) + ".html";
+  auto error = files.find(url);
+  if (error) {
+    response.set_content(error);
+  }
+  return ConnectionStatus::Error;
+}
+
+static ConnectionStatus
+generateWebsocketHandshake(http::request const& request,
+                           fs::cache const& files,
+                           http::response& response) {
+  auto& headers = request.get_headers();
+  auto key = headers.find("sec-websocket-key");
+  auto version = headers.find("sec-websocket-version");
   if (key == headers.end() || version == headers.end()) {
-    response.set_status_code(http::response::status_code::BAD_REQUEST);
-    return false;
+    return generateHttpErrorResponse(
+      http::response::status_code::BAD_REQUEST, files, response);
   }
   if (version->second != "13") {
-    response.set_status_code(http::response::status_code::BAD_REQUEST);
-    return false;
+    return generateHttpErrorResponse(
+      http::response::status_code::BAD_REQUEST, files, response);
   }
   std::string magicString = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
   utils::SHA1 acceptHash = utils::sha1(key->second + magicString);
@@ -64,114 +59,304 @@ websocketHandshake(http::request::headers const& headers,
   response.get_headers().insert(std::make_pair("Upgrade", "websocket"));
   response.get_headers().insert(std::make_pair("Connection", "Upgrade"));
   response.get_headers().insert(std::make_pair("Sec-WebSocket-Accept", acceptHash64));
-  return true;
+  return ConnectionStatus::Ok;
 }
 
-using tls_channel = com::channel<event::scheduler, Socket>;
+static bool
+wantsToClose(http::request const& request) {
+  auto& headers = request.get_headers();
+  auto h = headers.find("connection");
+  return h != headers.end() && h->second == "close";
+}
+
+static bool
+wantsToUpgrade(http::request const& request, std::string& protocol) {
+  auto& headers = request.get_headers();
+  auto h = headers.find("upgrade");
+  if (h != headers.end()) {
+    protocol = h->second;
+    return true;
+  }
+  return false;
+}
+
+static bool
+hasHostHeader(http::request const& request, std::string& host) {
+  auto& headers = request.get_headers();
+  auto h = headers.find("host");
+  if (h != headers.end()) {
+    host = h->second;
+    return true;
+  }
+  return false;
+}
+
+static ConnectionStatus
+generateResponse(http::request const& request,
+                 fs::cache const& files,
+                 http::response& response) {
+  switch (request.get_method()) {
+  case http::request::method::GET: {
+    std::string host;
+    if (!hasHostHeader(request, host)) {
+      return generateHttpErrorResponse(
+          http::response::status_code::BAD_REQUEST, files, response);
+    }
+    
+    bool closeOnClientRequest = false;
+    std::string upgradeTo;
+    if (wantsToClose(request)) {
+      closeOnClientRequest = true;
+    } else if (wantsToUpgrade(request, upgradeTo)) {
+      if (upgradeTo == "websocket") {
+        return generateWebsocketHandshake(request, files, response);
+      } else {
+        return generateHttpErrorResponse(
+          http::response::status_code::NOT_IMPLEMENTED, files, response);
+      }
+    }
+    auto uri = request.get_uri();
+    if (uri == "/") {
+      uri = "/index.html";
+    }
+    auto content = files.find(uri);
+    if (!content) {
+      return generateHttpErrorResponse(
+        http::response::status_code::NOT_FOUND, files, response);
+    }
+    response.set_status_code(http::response::status_code::OK);
+    response.set_content(content);
+    if (closeOnClientRequest) {
+      response.get_headers().insert(std::make_pair("Connection", "close"));
+      return ConnectionStatus::OkClose;
+    }
+    return ConnectionStatus::Ok;
+  } break;
+  default:
+    return generateHttpErrorResponse(
+      http::response::status_code::NOT_IMPLEMENTED, files, response);
+  }
+}
+
+class scoped_logger final {
+public:
+  template<typename tocket_type>
+  scoped_logger(tocket_type const& client,
+                std::string const& context)
+    : _context(context) {
+    std::stringstream ss;
+    ss << client;
+    _name = ss.str();
+    std::cout << dateAndTime() << " - " << _name
+              << " - begin(" << _context << ")" << std::endl;
+  }
+  ~scoped_logger() {
+    std::cout << dateAndTime() << " - " << _name
+              << " - end(" << _context << ")" << std::endl;
+  }
+  scoped_logger(scoped_logger const&) = delete;
+  scoped_logger(scoped_logger&&) = delete;
+  scoped_logger& operator = (scoped_logger const&) = delete;
+  scoped_logger& operator = (scoped_logger&&) = delete;
+  void noteworthy(http::request const& request,
+                  http::response const& response) const {
+    std::cout << dateAndTime() << " - " << _name
+              << " - noteworthy(" << _context << ")" << std::endl;
+    std::cout << ">>>>" << std::endl;
+    std::cout << request;
+    std::cout << "====" << std::endl;
+    std::cout << response;
+    std::cout << "<<<<" << std::endl;
+  }
+  void fatal(std::string const& what) {
+    std::cout << dateAndTime() << " - " << _name
+              << " - fatal(" << _context << ")" << std::endl;
+    std::cout << what << std::endl;
+  }
+  void note(std::string const& what) {
+    std::cout << dateAndTime() << " - " << _name
+              << " - note(" << _context << "): "
+              << what << std::endl;
+  }
+private:
+  std::string _name;
+  std::string _context;
+};
+
+template<typename socket_type>
 static coro::sync_task<void>
 httpServer(event::scheduler& s,
-           Socket client,
+           socket_type client,
            fs::cache const& files) {
-  tls_channel channel(s, client);
+  using channel_type = com::channel<event::scheduler, socket_type>;
+  scoped_logger logger(client, "https");
+  channel_type channel(s, client);
   auto chars = channel.async_char_stream();
-  bool upgradeToWebsocket = false;
+  ConnectionStatus status = ConnectionStatus::Ok;
+  try {
   for co_await (auto request : http::request::stream(chars)) {
-      //std::cout << ">>>>" << std::endl;
-      //std::cout << request;
       http::response response;
-      if (request.get_method() == http::request::method::GET) {
-        auto& headers = request.get_headers();
-        auto upgrade = headers.find("Upgrade");
-        if (upgrade != headers.end()) {
-          if (upgrade->second == "websocket") {
-            upgradeToWebsocket = websocketHandshake(headers, response);
-          } else {
-            response.set_status_code(http::response::status_code::NOT_IMPLEMENTED);
-          }
-        } else {
-          auto uri = request.get_uri();
-          if (uri == "/") {
-            uri = "/index.html";
-          }
-          auto content = files.find(uri, true);
-          if (content) {
-            response.set_status_code(http::response::status_code::OK);
-            response.set_content(content);
-          } else {
-            response.set_status_code(http::response::status_code::NOT_FOUND);
-          }
-        }
-      } else {
-        response.set_status_code(http::response::status_code::NOT_IMPLEMENTED);
+      status = generateResponse(request, files, response);
+      if (status != ConnectionStatus::Ok) {
+        logger.noteworthy(request, response);
       }
-      auto buffer = response.serialize();
-      //std::cout << "====" << std::endl;
-      std::size_t sent = 0;
-      auto toSend = buffer.size();
-      while (sent < toSend) {
-        //std::cout << response;
-        auto bytes = co_await client.async_write(s, buffer.data() + sent, toSend - sent);
-        if (bytes == 0) {
-          std::cout << "closed: " << client << std::endl;
-          co_return;
-        }
-        sent += bytes;
+
+      if (!co_await http::response::async_write(channel, response)) {
+        co_return;
       }
-      //std::cout << "<<<<" << std::endl;
-      if (upgradeToWebsocket) {
+      if (status != ConnectionStatus::Ok) {
         break;
       }
     }
-  if (upgradeToWebsocket) {
-    std::cout << "upgrade: " << client << std::endl;
+  if (status == ConnectionStatus::Upgrade) {
+#if 0
+    std::cout << dateAndTime() << " - upgrade: " << clientName << std::endl;
     for co_await (auto frame : websocket::stream(channel)) {
         std::string msg(frame.data.begin(), frame.data.end());
-        //std::cout << "websocket: " << msg << std::endl;
         if (!co_await websocket::async_send_text(channel, "Hey there!")) {
           break;
         }
         co_await websocket::async_send_close(channel);
       }
+#else
+    throw std::runtime_error("error: Ignoring attempt to upgrade");
+#endif
   }
-  std::cout << "closed: " << client << std::endl;
+  } catch (std::runtime_error& err) {
+    logger.fatal(err.what());
+  }
 }
 
+using open_channel = com::channel<event::scheduler, net::socket>;
+static coro::sync_task<void>
+httpsForwarder(event::scheduler& s,
+               net::socket client) {
+  scoped_logger logger(client, "http");
+  open_channel channel(s, client);
+  auto chars = channel.async_char_stream();
+  try {
+    for co_await (auto request : http::request::stream(chars)) {
+        std::string host;
+        http::response response;
+        if (!hasHostHeader(request, host)) {
+          // Host header is required
+          // TODO: Describe reason in message body?
+          response.set_status_code(http::response::status_code::BAD_REQUEST);
+          response.get_headers().insert(std::make_pair("Connection", "close"));
+        } else {
+          // TODO: be more strict about the host header?
+          auto location = "https://" + host + request.get_uri();
+          response.set_status_code(http::response::status_code::MOVED_PERMANENTLY);
+          response.get_headers().insert(std::make_pair("Location", location));
+          response.get_headers().insert(std::make_pair("Connection", "close"));
+        }
+    
+        logger.noteworthy(request, response);
+
+        if (!co_await http::response::async_write(channel, response)) {
+          co_return;
+        }
+        co_return;
+      }
+  } catch (std::runtime_error& err) {
+    logger.fatal(err.what());
+  }
+}
+
+using open_channel = com::channel<event::scheduler, net::socket>;
+static coro::sync_task<void>
+controlHandler(event::scheduler& s,
+               net::socket client) {
+  bool shutdown = false;
+  scoped_logger logger(client, "control");
+  open_channel channel(s, client);
+  auto chars = channel.async_char_stream();
+  try {
+    for co_await (auto request : http::request::stream(chars)) {
+        std::string host;
+        http::response response;
+        if (request.get_method() != http::request::method::GET ||
+            !hasHostHeader(request, host) ||
+            request.get_uri() != "/shutdown") {
+          // TODO: Describe reason in message body?
+          response.set_status_code(http::response::status_code::BAD_REQUEST);
+          response.get_headers().insert(std::make_pair("Connection", "close"));
+        } else {
+          response.set_status_code(http::response::status_code::OK);
+          response.get_headers().insert(std::make_pair("Connection", "close"));
+          shutdown = true;
+        }
+        logger.noteworthy(request, response);
+        if (!co_await http::response::async_write(channel, response)) {
+          co_return;
+        }
+        if (shutdown) {
+          logger.note("shutdown");
+          s.trigger_shutdown_from_task();
+        }
+        co_return;
+      }
+  } catch (std::runtime_error& err) {
+    logger.fatal(err.what());
+  }
+}
+
+template<typename socket_type, typename handler_type>
 coro::sync_task<void>
-acceptLoop(event::scheduler& s,
-           Socket& listener,
-           fs::cache const& files) {
-  std::vector<coro::sync_task<void>> connections;
+acceptor(event::scheduler& s, socket_type listener,
+         handler_type handler) {
   while (true) {
-    std::cout << "accepting..." << std::endl;
     auto client = co_await listener.async_accept(s);
     if (!client) {
-      std::cout << "accept failed" << std::endl;
+      std::cout << dateAndTime() << " - accept failed" << std::endl;
       continue;
     }
-    std::cout << "accepted: " << client << std::endl;
-    connections.erase(
-      std::remove_if(connections.begin(), connections.end(),
-                     [](auto const& c) {
-                       if (c.done()) {
-                         try {
-                           c.result();
-                         } catch (std::runtime_error const& e) {
-                           std::cout << "exception: " << e.what() << std::endl;
-                         }
-                       }
-                       return c.done();
-                     }),
-      connections.end());
-    connections.push_back(httpServer(s, std::move(client), files));
-    std::cout << "connections: " << connections.size() << std::endl;
-    connections.back().start();
+    std::cout << dateAndTime() << " - " << client << " - accepted" << std::endl;
+    s.execute(handler(std::move(client)));
   }
+}
+
+template<typename socket_type, typename... arg_types>
+auto createListeners(char const* host, char const* port, arg_types&& ...args) {
+  std::vector<socket_type> listeners;
+  {
+    // First try to bind to IPv6
+    net::address_options options(net::IPv6, net::TCP, host, port);
+    for (auto& info : options) {
+      std::cout << "Try to listen on " << info << std::endl;
+      try {
+        auto l = socket_type(info, 10, args...);
+        std::cout << "  Listening: " << l << std::endl;
+        listeners.push_back(std::move(l));
+        
+      } catch (std::runtime_error& ex) {
+        std::cout << "  Skipping: " << ex.what() << std::endl;
+      }
+    }
+  }
+  {
+    // In case of no dual-stack: Try to manually bind to IPv4
+    net::address_options options(net::IPv4, net::TCP, host, port);
+    for (auto& info : options) {
+      std::cout << "Try to listen on " << info << std::endl;
+      try {
+        auto l = socket_type(info, 10, args...);
+        std::cout << "  Listening: " << l << std::endl;
+        listeners.push_back(std::move(l));
+      } catch (std::runtime_error& ex) {
+        std::cout << "  Skipping: " << ex.what() << std::endl;
+      }
+    }
+  }
+  return listeners;
 }
 
 int main(int argc, char const* argv[]) {
+  std::cout << dateAndTime() << " - Launching Server" << std::endl;
   for (int i = 0; i < argc; ++i) {
     std::cout << "argv[" << i << "] = \"" << argv[i] << "\"" << std::endl;
   }
+  bool devMode = false;
   std::string path(".");
   std::string cert;
   std::string key;
@@ -188,21 +373,46 @@ int main(int argc, char const* argv[]) {
       assert(i+1 < argc);
       key = std::string(argv[++i]);
     }
+    if (std::string(argv[i]) == "--dev") {
+      devMode = true;
+    }
   }
-
-  TLSConfig tlsConfig(cert, key);
 
   event::scheduler s;
-  auto listeners = createListeners(nullptr, "443", tlsConfig);
-
-  fs::cache files(path);
-
   std::vector<coro::sync_task<void>> tasks;
-  for (auto& listener : listeners) {
-    tasks.push_back(acceptLoop(s, *listener, files));
-    tasks.back().start();
+  fs::cache files(path, devMode);
+  auto controlListeners = createListeners<net::socket>(nullptr, "6789");
+  if (devMode) {
+    auto httpListeners = createListeners<net::socket>(nullptr, "8080");
+    for (auto& listener : httpListeners) {
+      s.execute(acceptor(s, std::move(listener), [&s, &files](auto client) {
+        return httpServer(s, std::move(client), files);
+      }));
+    }
+    for (auto& listener : controlListeners) {
+      s.execute(acceptor(s, std::move(listener), [&s](auto client) {
+        return controlHandler(s, std::move(client));
+      }));
+    }
+  } else {
+    crypto::config tlsConfig(cert, key);
+    auto httpsListeners = createListeners<net::tls_socket>(nullptr, "443", tlsConfig);
+    auto httpListeners = createListeners<net::socket>(nullptr, "80");
+    for (auto& listener : httpsListeners) {
+      s.execute(acceptor(s, std::move(listener), [&s, &files](auto client) {
+        return httpServer(s, std::move(client), files);
+      }));
+    }
+    for (auto& listener : httpListeners) {
+      s.execute(acceptor(s, std::move(listener), [&s](auto client) {
+        return httpsForwarder(s, std::move(client));
+      }));
+    }
+    for (auto& listener : controlListeners) {
+      s.execute(acceptor(s, std::move(listener), [&s](auto client) {
+        return controlHandler(s, std::move(client));
+      }));
+    }
   }
-  s.run();
-  
-  return 0;
+  return s.run();
 }

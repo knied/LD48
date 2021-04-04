@@ -1,10 +1,15 @@
 ////////////////////////////////////////////////////////////////////////////////
 
 #include "http.hpp"
+#include <sstream>
+#include <iomanip>
 
 ////////////////////////////////////////////////////////////////////////////////
 
 namespace http {
+
+constexpr std::size_t maxAllowedCharsPerLine = 256;
+constexpr std::size_t maxAllowedLinesInHeader = 32;
 
 static constexpr char const*
 methodToString(request::method m) {
@@ -18,6 +23,7 @@ reasonPhrase(response::status_code sc) {
   switch (sc) {
   case response::status_code::SWITCHING_PROTOCOLS: return "Switching Protocols";
   case response::status_code::OK: return "OK";
+  case response::status_code::MOVED_PERMANENTLY: return "Moved Permanently";
   case response::status_code::BAD_REQUEST: return "Bad Request";
   case response::status_code::NOT_FOUND: return "Not Found";
   case response::status_code::NOT_IMPLEMENTED: return "Not Implemented";
@@ -35,24 +41,72 @@ mimeTypeToString(content::mime_type t) {
   }
 }
 
-static constexpr bool
+static inline constexpr bool
 isWhitespace(char c) {
   return c == ' ' || c == '\t';
 }
 
+static inline constexpr bool
+isVCHAR(char c) {
+  return (c >= 0x20 && c < 0x7f) || c == 0x09;
+}
+
+static inline constexpr bool
+isDIGIT(char c) {
+  return c >= '0' && c <= '9';
+}
+
+static inline constexpr bool
+isALPHA(char c) {
+  return (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z');
+}
+
+static inline constexpr bool
+isTCHAR(char c) {
+  return isALPHA(c) || isDIGIT(c)
+    || c == '!' || c == '#' || c == '$' || c == '%' || c == '&'
+    || c == '\'' || c == '*' || c == '+' || c == '-' || c == '.'
+    || c == '^' || c == '_' || c == '`' || c == '|' || c == '~';
+}
+
+template< typename T >
+std::string toHex( T i )
+{
+  std::stringstream stream;
+  stream << "0x"
+         << std::setfill ('0') << std::setw(sizeof(T)*2)
+         << std::hex << (unsigned long long)i;
+  return stream.str();
+}
+
 static coro::async_generator<std::string>
 messageLines(coro::async_generator<char>& chars) {
-  // TODO(security): Is there a maximum line length? Should I define one?
   std::string line;
+  char prev = 0;
   for co_await (auto c : chars) {
-    if (c != '\r' && c != '\n') {
-      line += c;
-    } else if (c == '\n') {
-      std::string tmp;
-      std::swap(tmp, line);
-      co_yield std::move(tmp);
+      if (line.size() > maxAllowedCharsPerLine) {
+        std::stringstream ss;
+        ss << "error: maxAllowedCharsPerLine="
+           << maxAllowedCharsPerLine << " exceeded ";
+        throw std::runtime_error(ss.str());
+      }
+      if (c != '\r' && c != '\n') {
+        if (!isVCHAR(c)) {
+          std::stringstream ss;
+          ss << "error: Illegal character '" << toHex(c) << "' in message line.";
+          throw std::runtime_error(ss.str());
+        }
+        line += c;
+      } else if (c == '\n') {
+        if (prev != '\r') {
+          throw std::runtime_error("error: Unexpected NL character");
+        }
+        std::string tmp;
+        std::swap(tmp, line);
+        co_yield std::move(tmp);
+      }
+      prev = c;
     }
-  }
 }
 
 class string_pointer {
@@ -136,30 +190,34 @@ parseRequestLine(std::string const& line, request& req) {
   auto it = tokens.begin();
   auto end = tokens.end();
   if (it == end) {
-    std::cout << "Missing request method token" << std::endl;
+    throw std::runtime_error("error: Missing request method token");
     return false;
   }
   auto methodToken = *it;
   if (++it == end) {
-    std::cout << "Missing uri token" << std::endl;
+    throw std::runtime_error("error: Missing uri token");
     return false;
   }
   auto uriToken = *it;
   if (++it == end) {
-    std::cout << "Missing version token" << std::endl;
+    throw std::runtime_error("error: Missing version token");
     return false;
   }
   auto versionToken = *it;
   if (++it != end) {
-    std::cout << "Unexpected additional tokens" << std::endl;
+    throw std::runtime_error("error: Unexpected additional tokens");
     return false;
   }
   if (versionToken != "HTTP/1.1") {
-    std::cout << "Unsupported HTTP version " << versionToken << std::endl;
+    std::stringstream ss;
+    ss << "error: Unsupported HTTP version " << versionToken;
+    throw std::runtime_error(ss.str());
     return false;
   }
   if (methodToken != "GET") {
-    std::cout << "Unsupported request method " << methodToken << std::endl;
+    std::stringstream ss;
+    ss << "error: Unsupported request method " << methodToken;
+    throw std::runtime_error(ss.str());
     return false;
   }
   req.set_method(request::method::GET);
@@ -171,14 +229,24 @@ static bool
 parseMessageHeader(std::string const& line, request& req) {
   auto p0 = line.find(':');
   if (p0 == std::string::npos) {
-    std::cout << "No ':' separator found" << std::endl;
+    throw std::runtime_error("error: No ':' separator found");
     return false;
   }
   auto p1 = p0+1;
   while (p1 < line.size() && isWhitespace(line[p1])) {
     p1++;
   }
-  req.get_headers().insert(std::make_pair(line.substr(0, p0), line.substr(p1)));
+  auto name = line.substr(0, p0);
+  std::transform(name.begin(), name.end(), name.begin(), 
+                 [](unsigned char c){ return std::tolower(c); });
+  for (auto c : name) {
+    if (!isTCHAR(c)) {
+      std::stringstream ss;
+      ss << "error: Illegal character '" << c << "' in field name.";
+      throw std::runtime_error(ss.str());
+    }
+  }
+  req.get_headers().insert(std::make_pair(name, line.substr(p1)));
   return true;
 }
 
@@ -192,18 +260,44 @@ request::stream(coro::async_generator<char>& chars) {
     //co_await ++it;
     //std::cout << "request_line: " << request_line << std::endl;
     request req;
-    if (!parseRequestLine(request_line, req)) {
-      std::cout << "Malformed request-line" << std::endl;
+    try {
+      if (!parseRequestLine(request_line, req)) {
+        co_return;
+      }
+    } catch (std::runtime_error& err) {
+      std::stringstream ss;
+      ss << err.what() << std::endl;
+      ss << "note: While parsing request \"" << request_line << "\"";
+      throw std::runtime_error(ss.str());
       co_return;
     }
 
+    std::size_t lineCount = 0;
     std::string multiLine;
     while ((co_await ++it) != end) {
       auto line = *it;
+      lineCount++;
+      if (lineCount > maxAllowedLinesInHeader) {
+        std::stringstream ss;
+        ss << "error: maxAllowedLinesInHeader="
+           << maxAllowedLinesInHeader << " exceeded" << std::endl;
+        ss << "note: While parsing line \"" << line << "\"" << std::endl;
+        ss << "note: While parsing request \"" << request_line << "\"";
+        throw std::runtime_error(ss.str());
+        co_return;
+      }
       //std::cout << "line: " << line << std::endl;
       if ((line.size() == 0 || !isWhitespace(line[0])) && multiLine.size()) {
-        if (!parseMessageHeader(multiLine, req)) {
-          std::cout << "Malformed message-header" << std::endl;
+        try {
+          if (!parseMessageHeader(multiLine, req)) {
+            co_return;
+          }
+        } catch (std::runtime_error& err) {
+          std::stringstream ss;
+          ss << err.what() << std::endl;
+          ss << "note: While parsing message header \"" << multiLine << "\"" << std::endl;
+          ss << "note: While parsing request \"" << request_line << "\"";
+          throw std::runtime_error(ss.str());
           co_return;
         }
         multiLine.clear();

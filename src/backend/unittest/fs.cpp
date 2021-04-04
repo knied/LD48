@@ -7,7 +7,7 @@
 ////////////////////////////////////////////////////////////////////////////////
 
 TEST(fs, cache_invalid_whitelist) {
-  fs::cache c("bla");
+  fs::cache c("bla", false);
   EXPECT_EQ(c.entries().size(), 0ull);
 }
 
@@ -19,7 +19,7 @@ TEST(fs, cache_valid_whitelist_missing_files) {
     wl << "blub.html" << std::endl;
   }
   
-  fs::cache c(".");
+  fs::cache c(".", false);
   EXPECT_EQ(c.entries().size(), 0ull);
 }
 
@@ -41,7 +41,7 @@ TEST(fs, cache_valid_whitelist_valid_files) {
     file << "world!" << std::endl;
   }
   
-  fs::cache c(".");
+  fs::cache c(".", false);
   EXPECT_EQ(c.entries().size(), 2ull);
 
   std::map<std::string, std::string> expectedContent {
@@ -73,7 +73,7 @@ TEST(fs, cache_find) {
     file << "world!" << std::endl;
   }
 
-  fs::cache c(".");
+  fs::cache c(".", false);
 
   auto r0 = c.find("/test.txt");
   ASSERT_NE(r0, nullptr);

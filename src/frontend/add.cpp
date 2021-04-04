@@ -60,6 +60,11 @@ vertex_defs() {
   };
 }
 
+struct InputBuffer {
+  int movementX, movementY;
+  int clientX, clientY;
+};
+
 class Game final {
 public:
   Game(gl::context ctx)
@@ -152,9 +157,13 @@ void main() {\n\
     printf("D Game\n");
     fflush(stdout);
   }
-  int render(float dt, unsigned int width, unsigned int height) {
+  int render(float dt, unsigned int width, unsigned int height,
+             InputBuffer const* buffer) {
+    (void)dt;
+    (void)buffer;
     //printf("Game::render %f %u %u\n", dt, width, height);
-    fflush(stdout);
+    //printf("pointer: %d,%d\n", buffer->movementX, buffer->movementY);
+    //fflush(stdout);
     mCommandBuffer.set_viewport(0, 0, width, height);
     mCommandBuffer.set_clear_color(0.1f, 0.1f, 0.1f, 1.0f);
     mCommandBuffer.clear(gl::CLEAR_COLOR);
@@ -168,11 +177,17 @@ void main() {\n\
                                                          fov, znear, zfar);
     auto view = mth::inverse(mth::translation(vec3{0.0f, 0.0f, 5.0f}));
     auto model = mth::identity<float,4,4>();
-    static auto anim = 0.0f;
-    anim += 0.1f * dt;
-    while (anim > 1.0f) anim -= 1.0f;
-    model = model * mth::rotation(mth::from_axis(vec3{0.0f,1.0f,0.0f}, 2.0f * anim * (float)mth::pi));
-    model = model * mth::rotation(mth::from_axis(vec3{1.0f,0.0f,0.0f}, 4.0f * anim * (float)mth::pi));
+    
+    static auto animX = 0.0f;
+    animX += 0.001f * (float)buffer->movementX;
+    while (animX > 1.0f) animX -= 1.0f;
+
+    static auto animY = 0.0f;
+    animY += 0.001f * (float)buffer->movementY;
+    while (animY > 1.0f) animY -= 1.0f;
+    
+    model = model * mth::rotation(mth::from_axis(vec3{0.0f,1.0f,0.0f}, 2.0f * animX * (float)mth::pi));
+    model = model * mth::rotation(mth::from_axis(vec3{1.0f,0.0f,0.0f}, 2.0f * animY * (float)mth::pi));
     auto mvp = projection * view * model;
     
     uniform u{
@@ -201,8 +216,9 @@ void release(void* udata) {
   delete reinterpret_cast<Game*>(udata);
 }
 WASM_EXPORT("render")
-int render(void* udata, float dt, unsigned int width, unsigned int height) {
-  return reinterpret_cast<Game*>(udata)->render(dt, width, height);
+int render(void* udata, float dt, unsigned int width, unsigned int height,
+           InputBuffer const* buffer) {
+  return reinterpret_cast<Game*>(udata)->render(dt, width, height, buffer);
 }
 
 WebSocket* gSocket = nullptr;

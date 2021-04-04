@@ -327,16 +327,18 @@ function RefHeap(size) {
 }
 
 function InputBuffer(wasm, heap, canvas) {
-    this.movementX = 0;
-    this.movementY = 0;
-    this.clientX = 0;
-    this.clientY = 0;
-    this.ptr = undefined;
+    let movementX = 0;
+    let movementY = 0;
+    let clientX = 0;
+    let clientY = 0;
+    const size = 16;
+    this.ptr = wasm.exports.allocate_buffer(size);
     canvas.addEventListener('mousemove', function(e) {
-        this.movementX += e.movementX;
-        this.movementY += e.movementY;
-        this.clientX = e.clientX;
-        this.clientY = e.clientY;
+        //console.log('mousemove', e);
+        movementX += e.movementX;
+        movementY += e.movementY;
+        clientX = e.clientX;
+        clientY = e.clientY;
     });
     canvas.addEventListener('mousedown', function(e) {
         console.log('mousedown', e);
@@ -350,16 +352,13 @@ function InputBuffer(wasm, heap, canvas) {
         console.log('keyup', e);
     });
     this.swap = function() {
-        if (this.ptr !== undefined) {
-            wasm.exports.free(this.ptr);
-        }
-        const size = 16;
-        this.ptr = wasm.exports.malloc(size);
         const view = new DataView(heap.buffer, this.ptr, size);
-        view.setUint32(0, this.movementX, true);
-        view.setUint32(4, this.movementY, true);
-        view.setUint32(8, this.clientX, true);
-        view.setUint32(16, this.clientY, true);
+        view.setInt32(0, movementX, true);
+        view.setInt32(4, movementY, true);
+        view.setInt32(8, clientX, true);
+        view.setInt32(12, clientY, true);
+        movementX = 0;
+        movementY = 0;
     };
 }
 
@@ -398,11 +397,13 @@ function main(refHeap, wasm, heap) {
                 gl.canvas.width = width;
                 gl.canvas.height = height;
             }
+            inputBuffer.swap()
             const dt = prevTime !== undefined ? (now - prevTime) / 1000.0 : 0.0;
             prevTime = now;
             const result = wasm.exports.render(udata, dt,
                                                gl.drawingBufferWidth,
-                                               gl.drawingBufferHeight);
+                                               gl.drawingBufferHeight,
+                                               inputBuffer.ptr);
             if (result === 0) {
                 requestAnimationFrame(this.update);
             } else {

@@ -8,7 +8,7 @@ AddOption('--for_debug', dest='debug', action='store_true', default=False, help=
 #AddOption('--with-assertions', dest='assertions', action='store_true', default=False, help="build with debug symbols")
 #AddOption('--non-optimized', dest='optimize', action='store_false', default=True, help="create non optimized build")
 AddOption('--prefix', dest='prefix', action='store', default='#/install', help="install location")
-AddOption('--run', dest='run', action='store_true', default=False, help="run programs")
+AddOption('--run', dest='run', action='store', default='', help="run programs")
 
 env = Environment(tools = ['default', 'clang', 'clangxx'])
 if not 'HOMEBREW_PREFIX' in os.environ:
@@ -43,13 +43,15 @@ env.Alias('install', env['PREFIX'])
 # Methods
 ################################################################################
 
-def RunProgram(self, dependencies, program, args):
-    if GetOption('run'):
+def RunProgram(self, name, dependencies, program, args):
+    if GetOption('run') == name:
         run = self.Command(target = 'output.log',
                            source = [program[0].abspath],
                            action = '$SOURCE %s | tee $TARGET' % (' '.join(args)))
         Depends(run, dependencies)
         self.AlwaysBuild(run)
+        self.Alias('run', run)
+        Default('run')
 AddMethod(Environment, RunProgram)
 
 def Wasm(self, target, sources):

@@ -5,7 +5,7 @@
 
 ////////////////////////////////////////////////////////////////////////////////
 
-#include "coro.hpp"
+#include <common/coro.hpp>
 #include <string>
 #include <vector>
 #include <map>

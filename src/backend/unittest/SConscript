@@ -1,6 +1,6 @@
 Import(['backend_env', 'backend_objs'])
 
-checker_sources = ['checker.cpp', 'coro.cpp', 'http.cpp', 'fs.cpp', 'com.cpp', 'websocket.cpp']
+checker_sources = ['checker.cpp', 'http.cpp', 'fs.cpp', 'com.cpp', 'websocket.cpp']
 
 checker_env = backend_env.Clone()
 checker_env.UnitTest('checker', checker_sources + backend_objs)

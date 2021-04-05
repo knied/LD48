@@ -1,0 +1,11 @@
+Import('env')
+
+common_sources = []
+
+common_env = env.Clone()
+
+subdirs = ['unittest']
+for subdir in subdirs:
+    SConscript('%s/SConscript'%subdir, exports=['common_env', 'common_sources'])
+
+Return('common_sources')

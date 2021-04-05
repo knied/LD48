@@ -1,10 +1,10 @@
-Import('env')
+Import(['env', 'common_sources'])
 
 backend_sources = ['net.cpp', 'http.cpp', 'fs.cpp']
 
 backend_env = env.Clone()
 backend_env.Append(LIBS = ['ev', 'tls'])
-backend_objs = backend_env.Object(backend_sources)
+backend_objs = backend_env.Object(backend_sources + common_sources)
 server = backend_env.Program('server', backend_objs + ['main.cpp'])
 backend = Install(backend_env['PREFIX'], server)
 

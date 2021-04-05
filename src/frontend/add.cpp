@@ -7,7 +7,8 @@
 #include <vector>
 #include <cstddef>
 
-#include "../common/mth.hpp"
+#include <common/mth.hpp>
+#include <common/ecs.hpp>
 
 class MySocket : public WebSocket {
 public:

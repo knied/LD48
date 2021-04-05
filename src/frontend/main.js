@@ -338,9 +338,9 @@ function MouseInputTracer(canvas, ) {
     let clientX = 0;
     let clientY = 0;
     let mousedownMain = 0;
-    let mouseupMain = 0;
+    let pressedMain = 0;
     let mousedownSecond = 0;
-    let mouseupSecond = 0;
+    let pressedSecond = 0;
     const mousemoveFn = function(e) {
         //console.log('mousemove', e);
         movementX += e.movementX;
@@ -352,18 +352,20 @@ function MouseInputTracer(canvas, ) {
         //console.log('mousedown', e);
         if (e.button == 0) {
             mousedownMain++;
+            pressedMain = 1;
         }
         if (e.button == 2) {
             mousedownSecond++;
+            pressedSecond = 1;
         }
     };
     const mouseupFn = function(e) {
         //console.log('mousedown', e);
         if (e.button == 0) {
-            mouseupMain++;
+            pressedMain = 0;
         }
         if (e.button == 2) {
-            mouseupSecond++;
+            pressedSecond = 0;
         }
     };
     let observers = [];
@@ -398,16 +400,14 @@ function MouseInputTracer(canvas, ) {
             view.setInt32(8, clientX, true);
             view.setInt32(12, clientY, true);
             view.setInt32(16, mousedownMain, true);
-            view.setInt32(20, mouseupMain, true);
+            view.setInt32(20, pressedMain, true);
             view.setInt32(24, mousedownSecond, true);
-            view.setInt32(28, mouseupSecond, true);
+            view.setInt32(28, pressedSecond, true);
         }
         movementX = 0;
         movementY = 0;
         mousedownMain = 0;
-        mouseupMain = 0;
         mousedownSecond = 0;
-        mouseupSecond = 0;
     };
 }
 
@@ -422,6 +422,7 @@ function KeyboardInputTracer() {
         const tracer = tracers[e.code];
         if (tracer !== undefined) {
             tracer.keydown++;
+            tracer.pressed = 1;
         }
     };
     const keyupFn = function(e) {
@@ -429,6 +430,7 @@ function KeyboardInputTracer() {
         const tracer = tracers[e.code];
         if (tracer !== undefined) {
             tracer.keyup++;
+            tracer.pressed = 0;
         }
     };
     this.addObserver = function(observer) {
@@ -440,7 +442,7 @@ function KeyboardInputTracer() {
             document.addEventListener('keyup', keyupFn);
         }
         if (tracers[code] === undefined) {
-            tracers[code] = { keyup: 0, keydown: 0, observers: []};
+            tracers[code] = { keydown: 0, pressed: 0, observers: []};
         }
         tracers[code].observers.push(observer);
     }
@@ -468,14 +470,13 @@ function KeyboardInputTracer() {
         for (const code in tracers) {
             const tracer = tracers[code];
             const keydown = tracer.keydown;
-            const keyup = tracer.keyup;
+            const pressed = tracer.pressed;
             for (const observer of tracer.observers) {
                 const view = observer.view;
                 view.setInt32(0, keydown, true);
-                view.setInt32(4, keyup, true);
+                view.setInt32(4, pressed, true);
             }
             tracer.keydown = 0;
-            tracer.keyup = 0;
         }
     };
 }

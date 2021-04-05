@@ -14,17 +14,17 @@ public:
   int clientX() const { return m_data.clientX; }
   int clientY() const { return m_data.clientY; }
   int mousedownMain() const { return m_data.mousedownMain; }
-  int mouseupMain() const { return m_data.mouseupMain; }
+  int pressedMain() const { return m_data.pressedMain; }
   int mousedownSecond() const { return m_data.mousedownSecond; }
-  int mouseupSecond() const { return m_data.mouseupSecond; }
+  int pressedSecond() const { return m_data.pressedSecond; }
 private:
   struct {
     int movementX, movementY;
     int clientX, clientY;
     int mousedownMain;
-    int mouseupMain;
+    int pressedMain;
     int mousedownSecond;
-    int mouseupSecond;
+    int pressedSecond;
   } m_data;
   int m_handle;
 };
@@ -36,10 +36,10 @@ public:
   key_observer(key_observer const&) = delete;
   key_observer(key_observer&&) = delete; // could be added
   int keydown() const { return m_data.keydown; }
-  int keyup() const { return m_data.keyup; }
+  int pressed() const { return m_data.pressed; }
 private:
   struct {
-    int keydown, keyup;
+    int keydown, pressed;
   } m_data;
   int m_handle;
 };

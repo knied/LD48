@@ -162,16 +162,7 @@ void main() {\n\
   }
   int render(float dt, unsigned int width, unsigned int height) {
     //printf("Game::render %f %u %u\n", dt, width, height);
-    //printf("pointer: %d,%d\n", buffer->movementX, buffer->movementY);
     //fflush(stdout);
-    if (mMouse.mousedownMain() > 0) {
-      printf("mousedown: %d,%d\n", mMouse.clientX(), mMouse.clientY());
-      fflush(stdout);
-    }
-    if (mKey.keydown() > 0) {
-      printf("keydown\n");
-      fflush(stdout);
-    }
     mCommandBuffer.set_viewport(0, 0, width, height);
     mCommandBuffer.set_clear_color(0.1f, 0.1f, 0.1f, 1.0f);
     mCommandBuffer.clear(gl::CLEAR_COLOR);
@@ -187,14 +178,15 @@ void main() {\n\
     auto model = mth::identity<float,4,4>();
     
     static auto animX = 0.0f;
-    //animX += 0.001f * (float)buffer->movementX;
-    animX += 0.1f * dt;
-    while (animX > 1.0f) animX -= 1.0f;
-
     static auto animY = 0.0f;
-    //animY += 0.001f * (float)buffer->movementY;
-    animY += 0.2f * dt;
-    while (animY > 1.0f) animY -= 1.0f;
+    if (mKey.pressed()) {
+      animX += 0.1f * dt;
+      while (animX > 1.0f) animX -= 1.0f;
+    }
+    if (mMouse.pressedMain()) {
+      animY += 0.2f * dt;
+      while (animY > 1.0f) animY -= 1.0f;
+    }
     
     model = model * mth::rotation(mth::from_axis(vec3{0.0f,1.0f,0.0f}, 2.0f * animX * (float)mth::pi));
     model = model * mth::rotation(mth::from_axis(vec3{1.0f,0.0f,0.0f}, 2.0f * animY * (float)mth::pi));

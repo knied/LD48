@@ -48,10 +48,10 @@ private:
     : base_component(mask) {}
   std::unordered_map<std::uint32_t, T> _map;
 };
-inline constexpr std::uint32_t cmask() { return true; }
+inline constexpr std::uint32_t fingerprint() { return 0; }
 template<typename T, typename... Ts>
-inline std::uint32_t cmask(component<T> const* c, component<Ts> const* ...cs) {
-  return c->mask() | cmask(cs...);
+inline std::uint32_t fingerprint(component<T> const* c, component<Ts> const* ...cs) {
+  return c->mask() | fingerprint(cs...);
 }
 
 class entity final {
@@ -71,7 +71,7 @@ public:
   }
   template<typename... Ts>
   inline bool has(component<Ts>* ...cs) const {
-    auto mask = cmask(cs...);
+    auto mask = fingerprint(cs...);
     return (_mask & mask) == mask;
   }
   template<typename T>
@@ -129,6 +129,37 @@ public:
       auto e = _entities.at(item.first).get();
       if (e->has(cs...)) {
         co_yield e;
+      }
+    }
+  }
+  inline coro::generator<entity*>
+  with(std::uint32_t mask) {
+    for (auto const& item : _entities) {
+      auto e = item.second.get();
+      if ((e->mask() & mask) == mask) {
+        co_yield e;
+      }
+    }
+  }
+  inline coro::generator<std::tuple<entity*, entity*>>
+  pairs_with(std::uint32_t mask0, std::uint32_t mask1) {
+    auto begin = _entities.begin();
+    auto end = _entities.end();
+    for (auto it0 = begin; it0 != end; ++it0) {
+      auto e0 = it0->second.get();
+      if (((e0->mask() & mask0) == mask0) ||
+          ((e0->mask() & mask1) == mask1)) {
+        auto it1 = it0;
+        for (++it1; it1 != end; ++it1) {
+          auto e1 = it1->second.get();
+          if (((e0->mask() & mask0) == mask0) &&
+              ((e1->mask() & mask1) == mask1)) {
+            co_yield { e0, e1 };
+          } else if (((e0->mask() & mask1) == mask1) &&
+                     ((e1->mask() & mask0) == mask0)) {
+            co_yield { e1, e0 };
+          }
+        }
       }
     }
   }

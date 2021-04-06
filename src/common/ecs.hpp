@@ -163,7 +163,6 @@ public:
       }
     }
   }
-  // TODO: pairs of entities
 
   inline auto size() const {
     return _entities.size();

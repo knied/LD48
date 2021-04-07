@@ -305,14 +305,20 @@ template<typename socket_type, typename handler_type>
 coro::sync_task<void>
 acceptor(event::scheduler& s, socket_type listener,
          handler_type handler) {
+  scoped_logger logger(listener, "listener");
   while (true) {
-    auto client = co_await listener.async_accept(s);
-    if (!client) {
-      std::cout << dateAndTime() << " - accept failed" << std::endl;
-      continue;
+    try {
+      auto client = co_await listener.async_accept(s);
+      if (!client) {
+        logger.fatal("accept failed");
+        continue;
+      }
+      logger.note("accepted");
+      //std::cout << dateAndTime() << " - " << client << " - accepted" << std::endl;
+      s.execute(handler(std::move(client)));
+    } catch (std::runtime_error& err) {
+      logger.fatal(err.what());
     }
-    std::cout << dateAndTime() << " - " << client << " - accepted" << std::endl;
-    s.execute(handler(std::move(client)));
   }
 }
 

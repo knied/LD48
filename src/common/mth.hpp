@@ -1,13 +1,16 @@
 #ifndef COMMON_MTH_HPP
 #define COMMON_MTH_HPP
 
-#include <math.h>
+#include <cmath>
 #include <type_traits>
 #include <initializer_list>
 
 namespace mth {
 
 double const pi = 3.1415926535897932384626433832795028841971693993751058209749445923078164062;
+
+template<typename T>
+inline T floor(T const& v);
     
 template<typename T>
 inline T sqrt(T const& v);
@@ -38,135 +41,148 @@ inline T atan2(T const& a, T const& b);
     
 template<typename T>
 inline T abs(T const& v);
-    
+
+template<>
+inline float floor<float> (float const& v) {
+  return std::floor(v);
+}
+template<>
+inline double floor<double> (double const& v) {
+  return std::floor(v);
+}
+template<>
+inline long double floor<long double> (long double const& v) {
+  return std::floor(v);
+}
+
 template<>
 inline float sqrt<float> (float const& v) {
-  return ::sqrtf(v);
+  return std::sqrtf(v);
 }
 template<>
 inline double sqrt<double> (double const& v) {
-  return ::sqrt(v);
+  return std::sqrt(v);
 }
 template<>
 inline long double sqrt<long double> (long double const& v) {
-  return ::sqrtl(v);
+  return std::sqrtl(v);
 }
 
 template<>
 inline float pow<float> (float const& b, float const& e) {
-  return ::powf(b, e);
+  return std::powf(b, e);
 }
 template<>
 inline double pow<double> (double const& b, double const& e) {
-  return ::pow(b, e);
+  return std::pow(b, e);
 }
 template<>
 inline long double pow<long double> (long double const& b, long double const& e) {
-  return ::powl(b, e);
+  return std::powl(b, e);
 }
     
 template<>
 inline float cos<float> (float const& v) {
-  return ::cosf(v);
+  return std::cosf(v);
 }
 template<>
 inline double cos<double> (double const& v) {
-  return ::cos(v);
+  return std::cos(v);
 }
 template<>
 inline long double cos<long double> (long double const& v) {
-  return ::cosl(v);
+  return std::cosl(v);
 }
     
 template<>
 inline float sin<float> (float const& v) {
-  return ::sinf(v);
+  return std::sinf(v);
 }
 template<>
 inline double sin<double> (double const& v) {
-  return ::sin(v);
+  return std::sin(v);
 }
 template<>
 inline long double sin<long double> (long double const& v) {
-  return ::sinl(v);
+  return std::sinl(v);
 }
     
 template<>
 inline float tan<float> (float const& v) {
-  return ::tanf(v);
+  return std::tanf(v);
 }
 template<>
 inline double tan<double> (double const& v) {
-  return ::tan(v);
+  return std::tan(v);
 }
 template<>
 inline long double tan<long double> (long double const& v) {
-  return ::tanl(v);
+  return std::tanl(v);
 }
     
 template<>
 inline float acos<float> (float const& v) {
-  return ::acosf(v);
+  return std::acosf(v);
 }
 template<>
 inline double acos<double> (double const& v) {
-  return ::acos(v);
+  return std::acos(v);
 }
 template<>
 inline long double acos<long double> (long double const& v) {
-  return ::acosl(v);
+  return std::acosl(v);
 }
     
 template<>
 inline float asin<float> (float const& v) {
-  return ::asinf(v);
+  return std::asinf(v);
 }
 template<>
 inline double asin<double> (double const& v) {
-  return ::asin(v);
+  return std::asin(v);
 }
 template<>
 inline long double asin<long double> (long double const& v) {
-  return ::asinl(v);
+  return std::asinl(v);
 }
     
 template<>
 inline float atan<float> (float const& v) {
-  return ::atanf(v);
+  return std::atanf(v);
 }
 template<>
 inline double atan<double> (double const& v) {
-  return ::atan(v);
+  return std::atan(v);
 }
 template<>
 inline long double atan<long double> (long double const& v) {
-  return ::atanl(v);
+  return std::atanl(v);
 }
     
 template<>
 inline float atan2<float> (float const& a, float const& b) {
-  return ::atan2f(a, b);
+  return std::atan2f(a, b);
 }
 template<>
 inline double atan2<double> (double const& a, double const& b) {
-  return ::atan2(a, b);
+  return std::atan2(a, b);
 }
 template<>
 inline long double atan2<long double> (long double const& a, long double const& b) {
-  return ::atan2l(a, b);
+  return std::atan2l(a, b);
 }
     
 template<>
 inline float abs<float>(float const& v) {
-  return ::fabsf(v);
+  return std::fabsf(v);
 }
 template<>
 inline double abs<double>(double const& v) {
-  return ::fabs(v);
+  return std::fabs(v);
 }
 template<>
 inline long double abs<long double>(long double const& v) {
-  return ::fabsl(v);
+  return std::fabsl(v);
 }
     
 template<typename T>

@@ -8,6 +8,7 @@
 #include <cstddef>
 
 #include <common/mth.hpp>
+#include <common/noise.hpp>
 #include <common/ecs.hpp>
 
 class MySocket : public WebSocket {
@@ -67,6 +68,52 @@ struct InputBuffer {
   int clientX, clientY;
 };
 
+class Terrain final {
+public:
+  Terrain(int width, int height, vec4 const& color, bool wire = false) {
+    auto index_at = [height](int x, int y) {
+      return x * (height + 1) + y;
+    };
+    for (int x = 0; x < width + 1; ++x) {
+      for (int y = 0; y < height + 1; ++y) {
+        auto h = (float)perlin::noise((double)x / (double)(width) * 5.0,
+                                      (double)y / (double)(height) * 5.0,
+                                      0.0);
+        vd.push_back({vec3{ (float)x, 1.0f * h, (float)-y }, color});
+      }
+    }
+    if (wire) {
+      for (int x = 0; x < width; ++x) {
+        for (int y = 0; y < height; ++y) {
+          id.push_back(index_at(x,y));
+          id.push_back(index_at(x+1,y));
+          id.push_back(index_at(x+1,y));
+          id.push_back(index_at(x+1,y+1));
+          id.push_back(index_at(x+1,y+1));
+          id.push_back(index_at(x,y+1));
+          id.push_back(index_at(x,y+1));
+          id.push_back(index_at(x,y));
+          id.push_back(index_at(x,y));
+          id.push_back(index_at(x+1,y+1));
+        }
+      }
+    } else {
+      for (int x = 0; x < width; ++x) {
+        for (int y = 0; y < height; ++y) {
+          id.push_back(index_at(x,y));
+          id.push_back(index_at(x+1,y));
+          id.push_back(index_at(x+1,y+1));
+          id.push_back(index_at(x,y));
+          id.push_back(index_at(x+1,y+1));
+          id.push_back(index_at(x,y+1));
+        }
+      }
+    }
+  }
+  std::vector<vertex> vd;
+  std::vector<unsigned int> id;
+};
+
 class Game final {
 public:
   Game(gl::context ctx)
@@ -91,7 +138,7 @@ void main() {\n\
 }\n", {"a_position", "a_color"}, {"u_mat"}));
 
     {
-      vec4 red{ 1.0f, 0.0f, 0.0f, 1.0f };
+      /*vec4 red{ 1.0f, 0.0f, 0.0f, 1.0f };
       vec4 green{ 0.0f, 1.0f, 0.0f, 1.0f };
       vec4 blue{ 0.0f, 0.0f, 1.0f, 1.0f };
       vec4 yellow{ 1.0f, 1.0f, 0.0f, 1.0f };
@@ -144,8 +191,9 @@ void main() {\n\
       std::vector<unsigned int> id;
       for (unsigned int i = 0; i < vd.size(); ++i) {
         id.push_back(i);
-      }
-      mMesh = std::make_unique<gl::mesh>(mCtx, gl::PRIMITIVE_TRIANGLES, vd, id, vertex_defs());
+        }*/
+      Terrain terrain(20,20,vec4{1,1,1,1},true);
+      mMesh = std::make_unique<gl::mesh>(mCtx, gl::PRIMITIVE_LINES, terrain.vd, terrain.id, vertex_defs());
     }
 
     mMeshBinding = std::make_unique<gl::mesh_binding>(mCtx, mMesh.get(), mPipeline.get());
@@ -175,7 +223,7 @@ void main() {\n\
     auto fov = 90.0f;
     auto projection = mth::perspective_projection<float>(width, height,
                                                          fov, znear, zfar);
-    auto view = mth::inverse(mth::translation(vec3{0.0f, 0.0f, 5.0f}));
+    auto view = mth::inverse(mth::translation(vec3{0.0f, 3.0f, 5.0f}));
     auto model = mth::identity<float,4,4>();
     
     static auto animX = 0.0f;

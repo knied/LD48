@@ -350,6 +350,8 @@ function MouseInputTracer(canvas, ) {
     };
     const mousedownFn = function(e) {
         //console.log('mousedown', e);
+        canvas.requestPointerLock = canvas.requestPointerLock;
+        canvas.requestPointerLock();
         if (e.button == 0) {
             mousedownMain++;
             pressedMain = 1;
@@ -393,7 +395,8 @@ function MouseInputTracer(canvas, ) {
         }
     }
     this.swap = function() {
-        for (const observer of observers) {
+        for (const i in observers) {
+            const observer = observers[i];
             const view = observer.view;
             view.setInt32(0, movementX, true);
             view.setInt32(4, movementY, true);
@@ -471,7 +474,9 @@ function KeyboardInputTracer() {
             const tracer = tracers[code];
             const keydown = tracer.keydown;
             const pressed = tracer.pressed;
-            for (const observer of tracer.observers) {
+            const observers = tracer.observers;
+            for (const i in observers) {
+                const observer = observers[i];
                 const view = observer.view;
                 view.setInt32(0, keydown, true);
                 view.setInt32(4, pressed, true);
@@ -773,8 +778,8 @@ document.addEventListener("DOMContentLoaded", function(event) {
             let prevTime;
             let anim = {
                 update: function(now) {
-                    var width = gl.canvas.clientWidth * devicePixelRatio;
-                    var height = gl.canvas.clientHeight * devicePixelRatio;
+                    var width = gl.canvas.clientWidth/* * devicePixelRatio*/;
+                    var height = gl.canvas.clientHeight/* * devicePixelRatio*/;
                     if (gl.canvas.width != width ||
                         gl.canvas.height != height) {
                         gl.canvas.width = width;

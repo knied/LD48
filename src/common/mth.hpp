@@ -619,6 +619,19 @@ inline auto normal(vector<T,N> const v) {
   return v / length(v);
 }
 
+template<typename T>
+inline auto baseX(matrix<T,4,4> const& m) {
+  return sub<3,1>(m, 0, 0);
+}
+template<typename T>
+inline auto baseY(matrix<T,4,4> const& m) {
+  return sub<3,1>(m, 0, 1);
+}
+template<typename T>
+inline auto baseZ(matrix<T,4,4> const& m) {
+  return sub<3,1>(m, 0, 2);
+}
+
 // special case: quaternion
 template<typename T>
 class quaternion : public vector<T,4> {

@@ -36,6 +36,7 @@ public:
   }
 };
 
+using vec2 = mth::vector<float,2>;
 using vec3 = mth::vector<float,3>;
 using vec4 = mth::vector<float,4>;
 using mat4 = mth::matrix<float,4,4>;
@@ -66,6 +67,57 @@ vertex_defs() {
 struct InputBuffer {
   int movementX, movementY;
   int clientX, clientY;
+};
+
+class DebugCamera final {
+public:
+  DebugCamera()
+    : mAngle{0,0}
+    , mPos{0,0}
+    , mModel(mth::identity<float,4,4>())
+    , mUpKey("KeyW")
+    , mDownKey("KeyS")
+    , mLeftKey("KeyA")
+    , mRightKey("KeyD") {}
+  ~DebugCamera() {}
+  void update(float dt) {
+    auto drot = 0.25f * dt * vec2{
+      (float)mMouse.movementX(),
+      (float)mMouse.movementY()
+    };
+    mAngle -= drot;
+    while (mAngle(0) >= 2 * mth::pi) {
+      mAngle(0) -= 2 * mth::pi;
+    }
+    if (mAngle(1) < -0.5f * mth::pi) {
+      mAngle(1) = -0.5f * mth::pi;
+    }
+    if (mAngle(1) > 0.5f * mth::pi) {
+      mAngle(1) = 0.5f * mth::pi;
+    }
+    mModel = mth::identity<float,4,4>();
+    mModel = mModel * mth::rotation(mth::from_axis(vec3{0.0f,1.0f,0.0f}, mAngle(0)));
+    mModel = mModel * mth::rotation(mth::from_axis(vec3{1.0f,0.0f,0.0f}, mAngle(1)));
+    int frontBack = mUpKey.pressed() - mDownKey.pressed();
+    int leftRight = mRightKey.pressed() - mLeftKey.pressed();
+    if (frontBack != 0 || leftRight != 0) {
+      auto dmove = 4.0f * dt * mth::normal(vec2{
+          (float)leftRight,
+          (float)frontBack
+        });
+      mPos += (mth::baseX(mModel) * dmove(0) - mth::baseZ(mModel) * dmove(1));
+    }
+    mModel = mth::translation(mPos) * mModel;
+  }
+  auto model() const {
+    return mModel;
+  }
+private:
+  vec2 mAngle;
+  vec3 mPos;
+  mat4 mModel;
+  input::key_observer mUpKey, mDownKey, mLeftKey, mRightKey;
+  input::mouse_observer mMouse;
 };
 
 class Terrain final {
@@ -117,8 +169,7 @@ public:
 class Game final {
 public:
   Game(gl::context ctx)
-    : mKey("KeyA")
-    , mCtx(ctx)
+    : mCtx(ctx)
     , mCommandBuffer(mCtx) {
     printf("C Game\n");
     fflush(stdout);
@@ -223,22 +274,10 @@ void main() {\n\
     auto fov = 90.0f;
     auto projection = mth::perspective_projection<float>(width, height,
                                                          fov, znear, zfar);
-    auto view = mth::inverse(mth::translation(vec3{0.0f, 3.0f, 5.0f}));
+    mCamera.update(dt);
+    auto view = mth::inverse(mCamera.model());
+    //auto view = mth::inverse(mth::translation(vec3{0.0f, 3.0f, 5.0f}));
     auto model = mth::identity<float,4,4>();
-    
-    static auto animX = 0.0f;
-    static auto animY = 0.0f;
-    if (mKey.pressed()) {
-      animX += 0.1f * dt;
-      while (animX > 1.0f) animX -= 1.0f;
-    }
-    if (mMouse.pressedMain()) {
-      animY += 0.2f * dt;
-      while (animY > 1.0f) animY -= 1.0f;
-    }
-    
-    model = model * mth::rotation(mth::from_axis(vec3{0.0f,1.0f,0.0f}, 2.0f * animX * (float)mth::pi));
-    model = model * mth::rotation(mth::from_axis(vec3{1.0f,0.0f,0.0f}, 2.0f * animY * (float)mth::pi));
     auto mvp = projection * view * model;
     
     uniform u{
@@ -250,8 +289,9 @@ void main() {\n\
     return 0;
   }
 private:
-  input::mouse_observer mMouse;
-  input::key_observer mKey;
+  DebugCamera mCamera;
+  //input::mouse_observer mMouse;
+  //input::key_observer mKey;
   gl::context mCtx;
   std::unique_ptr<gl::pipeline> mPipeline;
   std::unique_ptr<gl::mesh> mMesh;

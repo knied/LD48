@@ -2,13 +2,13 @@
 #include "input.hpp"
 #include "websocket.hpp"
 #include "graphics.hpp"
+#include "geometry.hpp"
 #include <stdio.h>
 #include <string>
 #include <vector>
 #include <cstddef>
 
 #include <common/mth.hpp>
-#include <common/noise.hpp>
 #include <common/ecs.hpp>
 
 class MySocket : public WebSocket {
@@ -52,15 +52,14 @@ entry_gl_type(mth::matrix<T, R, C> const&) noexcept {
   return gl::atype<T>();
 }
 
-struct vertex { vec3 pos; vec4 color; };
 struct uniform { mat4 mat; };
 
 static std::vector<gl::attribute_def>
 vertex_defs() {
-  vertex tmp;
+  geometry::vertex tmp;
   return {
-    { "a_position", sizeof(vertex), offsetof(vertex, pos), entry_count(tmp.pos), entry_gl_type(tmp.pos), false },
-    { "a_color", sizeof(vertex), offsetof(vertex, color), entry_count(tmp.color), entry_gl_type(tmp.color), false }
+    { "a_position", sizeof(geometry::vertex), offsetof(geometry::vertex, pos), entry_count(tmp.pos), entry_gl_type(tmp.pos), false },
+    { "a_color", sizeof(geometry::vertex), offsetof(geometry::vertex, color), entry_count(tmp.color), entry_gl_type(tmp.color), false }
   };
 }
 
@@ -118,52 +117,6 @@ private:
   mat4 mModel;
   input::key_observer mUpKey, mDownKey, mLeftKey, mRightKey;
   input::mouse_observer mMouse;
-};
-
-class Terrain final {
-public:
-  Terrain(int width, int height, vec4 const& color, bool wire = false) {
-    auto index_at = [height](int x, int y) {
-      return x * (height + 1) + y;
-    };
-    for (int x = 0; x < width + 1; ++x) {
-      for (int y = 0; y < height + 1; ++y) {
-        auto h = (float)perlin::noise((double)x / (double)(width) * 5.0,
-                                      (double)y / (double)(height) * 5.0,
-                                      0.0);
-        vd.push_back({vec3{ (float)x, 1.0f * h, (float)-y }, color});
-      }
-    }
-    if (wire) {
-      for (int x = 0; x < width; ++x) {
-        for (int y = 0; y < height; ++y) {
-          id.push_back(index_at(x,y));
-          id.push_back(index_at(x+1,y));
-          id.push_back(index_at(x+1,y));
-          id.push_back(index_at(x+1,y+1));
-          id.push_back(index_at(x+1,y+1));
-          id.push_back(index_at(x,y+1));
-          id.push_back(index_at(x,y+1));
-          id.push_back(index_at(x,y));
-          id.push_back(index_at(x,y));
-          id.push_back(index_at(x+1,y+1));
-        }
-      }
-    } else {
-      for (int x = 0; x < width; ++x) {
-        for (int y = 0; y < height; ++y) {
-          id.push_back(index_at(x,y));
-          id.push_back(index_at(x+1,y));
-          id.push_back(index_at(x+1,y+1));
-          id.push_back(index_at(x,y));
-          id.push_back(index_at(x+1,y+1));
-          id.push_back(index_at(x,y+1));
-        }
-      }
-    }
-  }
-  std::vector<vertex> vd;
-  std::vector<unsigned int> id;
 };
 
 class Game final {
@@ -243,8 +196,9 @@ void main() {\n\
       for (unsigned int i = 0; i < vd.size(); ++i) {
         id.push_back(i);
         }*/
-      Terrain terrain(20,20,vec4{1,1,1,1},true);
-      mMesh = std::make_unique<gl::mesh>(mCtx, gl::PRIMITIVE_LINES, terrain.vd, terrain.id, vertex_defs());
+      //auto mesh = geometry::generate_terrain(20, 20, vec4{1,1,1,1}, true);
+      auto mesh = geometry::generate_sphere(1.0f, 16, vec4{1,1,1,1}, true);
+      mMesh = std::make_unique<gl::mesh>(mCtx, gl::PRIMITIVE_LINES, mesh.vd, mesh.id, vertex_defs());
     }
 
     mMeshBinding = std::make_unique<gl::mesh_binding>(mCtx, mMesh.get(), mPipeline.get());
@@ -271,7 +225,7 @@ void main() {\n\
 
     auto znear = 0.1f;
     auto zfar = 1000.0f;
-    auto fov = 90.0f;
+    auto fov = 80.0f;
     auto projection = mth::perspective_projection<float>(width, height,
                                                          fov, znear, zfar);
     mCamera.update(dt);

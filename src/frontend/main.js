@@ -776,7 +776,7 @@ document.addEventListener("DOMContentLoaded", function(event) {
         wasi_snapshot_preview1: wasi_module
     };
     console.log(importObject);
-    fetch('add.wasm')
+    fetch('game.wasm')
         .then(response => response.arrayBuffer())
         .then(bytes => WebAssembly.instantiate(bytes, importObject))
         .then(results => {

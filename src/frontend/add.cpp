@@ -10,6 +10,7 @@
 
 #include <common/mth.hpp>
 #include <common/ecs.hpp>
+#include <common/gjk.hpp>
 
 class MySocket : public WebSocket {
 public:
@@ -40,6 +41,7 @@ using vec2 = mth::vector<float,2>;
 using vec3 = mth::vector<float,3>;
 using vec4 = mth::vector<float,4>;
 using mat4 = mth::matrix<float,4,4>;
+using rot3 = mth::quaternion<float>;
 
 template<typename T, unsigned int R, unsigned int C>
 static constexpr inline unsigned int
@@ -52,7 +54,10 @@ entry_gl_type(mth::matrix<T, R, C> const&) noexcept {
   return gl::atype<T>();
 }
 
-struct uniform { mat4 mat; };
+struct uniform {
+  mat4 mat;
+  vec4 color;
+};
 
 static std::vector<gl::attribute_def>
 vertex_defs() {
@@ -68,17 +73,129 @@ struct InputBuffer {
   int clientX, clientY;
 };
 
+using Scene = ecs::scene;
+using Entity = ecs::entity;
+
+namespace Comp {
+
+struct Camera {
+  float znear = 0.1f;
+  float zfar = 1000.0f;
+  float fov = 70.0f;
+};
+
+struct Shape {
+  vec4 color = vec4{1,1,1,1};
+};
+
+struct Physical {
+  int contacts = 0;
+  float radius = 1.0f;
+};
+
+struct Transformation {
+  vec3 position = vec3{0,0,0};
+  rot3 rotation = mth::from_euler(0.0f, 0.0f, 0.0f);
+  Entity* parent = nullptr;
+  mat4 local() const {
+    return mth::transformation(rotation, position);
+  }
+};
+
+} // namespace Comp
+
+using CameraComponent = ecs::component<Comp::Camera>;
+using ShapeComponent = ecs::component<Comp::Shape>;
+using PhysicalComponent = ecs::component<Comp::Physical>;
+using TransformationComponent = ecs::component<Comp::Transformation>;
+
+struct GameState {
+  ecs::scene scene;
+  CameraComponent* cameraComp;
+  ShapeComponent* shapeComp;
+  PhysicalComponent* physicalComp;
+  TransformationComponent* transComp;
+
+  GameState() {
+    cameraComp = scene.create_component<Comp::Camera>();
+    shapeComp = scene.create_component<Comp::Shape>();
+    physicalComp = scene.create_component<Comp::Physical>();
+    transComp = scene.create_component<Comp::Transformation>();
+  }
+};
+
+static mat4
+world(Entity* e, TransformationComponent* transComp) {
+  mat4 result = mth::identity<float,4,4>();
+  while (e != nullptr) {
+    if (e->has(transComp)) {
+      auto& trans = e->get(transComp);
+      result = trans.local() * result;
+      e = trans.parent;
+    } else {
+      e = nullptr;
+    }
+  }
+  return result;
+}
+
+class Sim final {
+public:
+  Sim(GameState* state)
+    : mState(state) {}
+  void update(float dt) {
+    (void)dt;
+
+    auto mask = ecs::fingerprint(mState->transComp, mState->physicalComp);
+    for (auto [e0, e1] : mState->scene.pairs_with(mask, mask)) {
+      auto m0 = world(e0, mState->transComp);
+      auto& physical0 = e0->get(mState->physicalComp);
+      gjk::sphere c0{ physical0.radius };
+      auto m1 = world(e1, mState->transComp);
+      auto& physical1 = e1->get(mState->physicalComp);
+      gjk::sphere c1{ physical1.radius };
+      gjk::transformed_convex c1_(mth::inverse_transformation(m0) * m1, &c1);
+      gjk::simplex simplex;
+      if (gjk::gjk(c0, c1_, simplex)) {
+        physical0.contacts++;
+        physical1.contacts++;
+      }
+    }
+
+    for (auto e : mState->scene.with(mState->physicalComp, mState->shapeComp)) {
+      auto& physical = e->get(mState->physicalComp);
+      auto& shape = e->get(mState->shapeComp);
+      if (physical.contacts > 0) {
+        shape.color = vec4{1,0,0,1};
+      } else {
+        shape.color = vec4{1,1,1,1};
+      }
+      physical.contacts = 0;
+    }
+  }
+
+private:
+  GameState* mState;
+};
+
 class DebugCamera final {
 public:
-  DebugCamera()
-    : mAngle{0,0}
+  DebugCamera(GameState* state)
+    : mState(state)
+    , mAngle{0,0}
     , mPos{0,0}
-    , mModel(mth::identity<float,4,4>())
+      //, mModel(mth::identity<float,4,4>())
     , mUpKey("KeyW")
     , mDownKey("KeyS")
     , mLeftKey("KeyA")
-    , mRightKey("KeyD") {}
-  ~DebugCamera() {}
+    , mRightKey("KeyD") {
+    mEntity = mState->scene.spawn();
+    mEntity->add(mState->cameraComp);
+    mEntity->add(mState->transComp);
+  }
+  ~DebugCamera() {
+    mState->scene.despawn(mEntity);
+  }
   void update(float dt) {
     auto drot = 0.25f * dt * vec2{
       (float)mMouse.movementX(),
@@ -94,9 +211,10 @@ public:
     if (mAngle(1) > 0.5f * mth::pi) {
       mAngle(1) = 0.5f * mth::pi;
     }
-    mModel = mth::identity<float,4,4>();
-    mModel = mModel * mth::rotation(mth::from_axis(vec3{0.0f,1.0f,0.0f}, mAngle(0)));
-    mModel = mModel * mth::rotation(mth::from_axis(vec3{1.0f,0.0f,0.0f}, mAngle(1)));
+    auto& trans = mEntity->get(mState->transComp);
+    trans.rotation = mth::from_euler(mAngle(1), mAngle(0), 0.0f);
+    
+    //mModel = mth::rotation();
     int frontBack = mUpKey.pressed() - mDownKey.pressed();
     int leftRight = mRightKey.pressed() - mLeftKey.pressed();
     if (frontBack != 0 || leftRight != 0) {
@@ -104,110 +222,125 @@ public:
           (float)leftRight,
           (float)frontBack
         });
-      mPos += (mth::baseX(mModel) * dmove(0) - mth::baseZ(mModel) * dmove(1));
+      //mPos += (mth::baseX(mModel) * dmove(0) - mth::baseZ(mModel) * dmove(1));
+      auto baseX = mth::transform(trans.rotation, vec3{1,0,0});
+      auto baseZ = mth::transform(trans.rotation, vec3{0,0,1});
+      mPos += (baseX * dmove(0) - baseZ * dmove(1));
     }
-    mModel = mth::translation(mPos) * mModel;
+    trans.position = mPos;
+    //mModel = mth::translation(mPos) * mModel;
   }
-  auto model() const {
+  Entity* entity() const {
+    return mEntity;
+  }
+  /*auto model() const {
     return mModel;
-  }
+    }*/
 private:
+  GameState* mState;
+  Entity* mEntity;
   vec2 mAngle;
   vec3 mPos;
-  mat4 mModel;
+  //mat4 mModel;
   input::key_observer mUpKey, mDownKey, mLeftKey, mRightKey;
   input::mouse_observer mMouse;
 };
 
-class Game final {
+class Renderer final {
 public:
-  Game(gl::context ctx)
+  Renderer(gl::context ctx, GameState* state)
     : mCtx(ctx)
+    , mState(state)
     , mCommandBuffer(mCtx) {
-    printf("C Game\n");
-    fflush(stdout);
     mPipeline = std::unique_ptr<gl::pipeline>(new gl::pipeline(mCtx, "\
 attribute vec4 a_position;\n\
 attribute vec4 a_color;\n\
 uniform mat4 u_mat;\n\
+uniform vec4 u_color;\n\
 varying vec4 v_color;\n\
 void main() {\n\
   gl_Position = u_mat * a_position;\n\
-  v_color = a_color;\n\
+  v_color = a_color * u_color;\n\
 }\n","\
 precision mediump float;\n\
 varying vec4 v_color;\n\
 void main() {\n\
   gl_FragColor = v_color;\n\
-}\n", {"a_position", "a_color"}, {"u_mat"}));
+}\n", {"a_position", "a_color"}, {"u_mat", "u_color"}));
+    //auto mesh = geometry::generate_terrain(20, 20, vec4{1,1,1,1}, true);
+    auto mesh = geometry::generate_sphere(1.0f, 16, vec4{1,1,1,1}, true);
+    //auto mesh = geometry::generate_box(1.0f, 2.0f, 3.0f, vec4{1,1,1,1}, true);
+    mMesh = std::make_unique<gl::mesh>(mCtx, gl::PRIMITIVE_LINES, mesh.vd, mesh.id, vertex_defs());
+    mMeshBinding = std::make_unique<gl::mesh_binding>(mCtx, mMesh.get(), mPipeline.get());
+    std::vector<gl::uniform_def> defs {
+      { "u_mat", gl::UNIFORM_MF4, offsetof(uniform, mat) },
+      { "u_color", gl::UNIFORM_VF4, offsetof(uniform, color) }
+    };
+    mUniformBinding = std::make_unique<gl::uniform_binding>(mCtx, mPipeline.get(), sizeof(uniform), defs);
+  }
+  void render(unsigned int width, unsigned int height, Entity* cam) {
+    mCommandBuffer.set_viewport(0, 0, width, height);
+    mCommandBuffer.set_clear_color(0.1f, 0.1f, 0.1f, 1.0f);
+    mCommandBuffer.clear(gl::CLEAR_COLOR);
+    mCommandBuffer.set_pipeline(mPipeline.get());
 
-    {
-      /*vec4 red{ 1.0f, 0.0f, 0.0f, 1.0f };
-      vec4 green{ 0.0f, 1.0f, 0.0f, 1.0f };
-      vec4 blue{ 0.0f, 0.0f, 1.0f, 1.0f };
-      vec4 yellow{ 1.0f, 1.0f, 0.0f, 1.0f };
-      vec4 cyan{ 0.0f, 1.0f, 1.0f, 1.0f };
-      vec4 pink{ 1.0f, 0.0f, 1.0f, 1.0f };
-      std::vector<vertex> vd {
-        // front
-        { vec3{ -1.0f, -1.0f, -1.0f }, red },
-        { vec3{ 1.0f, -1.0f, -1.0f }, red },
-        { vec3{ 1.0f, 1.0f, -1.0f }, red },
-        { vec3{ -1.0f, -1.0f, -1.0f }, red },
-        { vec3{ 1.0f, 1.0f, -1.0f }, red },
-        { vec3{ -1.0f, 1.0f, -1.0f }, red },
-        // back
-        { vec3{ -1.0f, -1.0f, 1.0f }, green },
-        { vec3{ 1.0f, 1.0f, 1.0f }, green },
-        { vec3{ 1.0f, -1.0f, 1.0f }, green },
-        { vec3{ -1.0f, -1.0f, 1.0f }, green },
-        { vec3{ -1.0f, 1.0f, 1.0f }, green },
-        { vec3{ 1.0f, 1.0f, 1.0f }, green },
-        // top
-        { vec3{ -1.0f, 1.0f, -1.0f }, blue },
-        { vec3{ 1.0f, 1.0f, -1.0f }, blue },
-        { vec3{ 1.0f, 1.0f, 1.0f }, blue },
-        { vec3{ -1.0f, 1.0f, -1.0f }, blue },
-        { vec3{ 1.0f, 1.0f, 1.0f }, blue },
-        { vec3{ -1.0f, 1.0f, 1.0f }, blue },
-        // bottom
-        { vec3{ -1.0f, -1.0f, -1.0f }, yellow },
-        { vec3{ 1.0f, -1.0f, 1.0f }, yellow },
-        { vec3{ 1.0f, -1.0f, -1.0f }, yellow },
-        { vec3{ -1.0f, -1.0f, -1.0f }, yellow },
-        { vec3{ -1.0f, -1.0f, 1.0f }, yellow },
-        { vec3{ 1.0f, -1.0f, 1.0f }, yellow },
-        // left
-        { vec3{ -1.0f, -1.0f, 1.0f }, cyan },
-        { vec3{ -1.0f, -1.0f, -1.0f }, cyan },
-        { vec3{ -1.0f, 1.0f, -1.0f }, cyan },
-        { vec3{ -1.0f, -1.0f, 1.0f }, cyan },
-        { vec3{ -1.0f, 1.0f, -1.0f }, cyan },
-        { vec3{ -1.0f, 1.0f, 1.0f }, cyan },
-        // right
-        { vec3{ 1.0f, -1.0f, 1.0f }, pink },
-        { vec3{ 1.0f, 1.0f, -1.0f }, pink },
-        { vec3{ 1.0f, -1.0f, -1.0f }, pink },
-        { vec3{ 1.0f, -1.0f, 1.0f }, pink },
-        { vec3{ 1.0f, 1.0f, 1.0f }, pink },
-        { vec3{ 1.0f, 1.0f, -1.0f }, pink },
+    assert(cam->has(mState->cameraComp));
+    assert(cam->has(mState->transComp));
+    auto const& camera = cam->get(mState->cameraComp);
+    auto projection
+      = mth::perspective_projection<float>(width, height, camera.fov,
+                                           camera.znear, camera.zfar);
+    auto view = mth::inverse(world(cam, mState->transComp));
+    auto vp = projection * view;
+    for (auto e : mState->scene.with(mState->shapeComp, mState->transComp)) {
+      auto const& shape = e->get(mState->shapeComp);
+      uniform u{
+        mth::transpose(vp * world(e, mState->transComp)),
+        shape.color
       };
-      std::vector<unsigned int> id;
-      for (unsigned int i = 0; i < vd.size(); ++i) {
-        id.push_back(i);
-        }*/
-      //auto mesh = geometry::generate_terrain(20, 20, vec4{1,1,1,1}, true);
-      auto mesh = geometry::generate_sphere(1.0f, 16, vec4{1,1,1,1}, true);
-      mMesh = std::make_unique<gl::mesh>(mCtx, gl::PRIMITIVE_LINES, mesh.vd, mesh.id, vertex_defs());
+      mCommandBuffer.set_mesh(mMeshBinding.get());
+      mCommandBuffer.set_uniforms(mUniformBinding.get(), u);
+      mCommandBuffer.draw();
+    }
+    mCommandBuffer.commit();
+  }
+private:
+  gl::context mCtx;
+  GameState* mState;
+  std::unique_ptr<gl::pipeline> mPipeline;
+  std::unique_ptr<gl::mesh> mMesh;
+  std::unique_ptr<gl::mesh_binding> mMeshBinding;
+  std::unique_ptr<gl::uniform_binding> mUniformBinding;
+  gl::command_buffer mCommandBuffer;
+};
+
+class Game final {
+public:
+  Game(gl::context ctx)
+    : mRenderer(ctx, &mState)
+    , mCamera(&mState)
+    , mSim(&mState) {
+    printf("C Game\n");
+    fflush(stdout);
+
+    for (int i = 0; i < 5; ++i) {
+      auto e = mState.scene.spawn();
+      auto& trans = e->add(mState.transComp);
+      trans.position = vec3{3.0f * i,0,0};
+      auto& shape = e->add(mState.shapeComp);
+      shape.color = vec4{0.2f + 0.2f * i, 1.0f, 1.0f, 1.0f};
+      e->add(mState.physicalComp);
+      mEntities.push_back(e);
     }
 
-    mMeshBinding = std::make_unique<gl::mesh_binding>(mCtx, mMesh.get(), mPipeline.get());
-
     {
-      std::vector<gl::uniform_def> defs {
-        { "u_mat", gl::UNIFORM_MF4, offsetof(uniform, mat) }
-      };
-      mUniformBinding = std::make_unique<gl::uniform_binding>(mCtx, mPipeline.get(), sizeof(uniform), defs);
+      auto e = mState.scene.spawn();
+      auto& trans = e->add(mState.transComp);
+      trans.position = vec3{0,-2,-5};
+      trans.parent = mCamera.entity();
+      e->add(mState.shapeComp);
+      e->add(mState.physicalComp);
+      mEntities.push_back(e);
     }
   }
   ~Game() {
@@ -215,43 +348,17 @@ void main() {\n\
     fflush(stdout);
   }
   int render(float dt, unsigned int width, unsigned int height) {
-    //printf("Game::render %f %u %u\n", dt, width, height);
-    //fflush(stdout);
-    mCommandBuffer.set_viewport(0, 0, width, height);
-    mCommandBuffer.set_clear_color(0.1f, 0.1f, 0.1f, 1.0f);
-    mCommandBuffer.clear(gl::CLEAR_COLOR);
-    mCommandBuffer.set_pipeline(mPipeline.get());
-    mCommandBuffer.set_mesh(mMeshBinding.get());
-
-    auto znear = 0.1f;
-    auto zfar = 1000.0f;
-    auto fov = 80.0f;
-    auto projection = mth::perspective_projection<float>(width, height,
-                                                         fov, znear, zfar);
     mCamera.update(dt);
-    auto view = mth::inverse(mCamera.model());
-    //auto view = mth::inverse(mth::translation(vec3{0.0f, 3.0f, 5.0f}));
-    auto model = mth::identity<float,4,4>();
-    auto mvp = projection * view * model;
-    
-    uniform u{
-      mth::transpose(mvp)
-    };
-    mCommandBuffer.set_uniforms(mUniformBinding.get(), u);
-    mCommandBuffer.draw();
-    mCommandBuffer.commit();
+    mSim.update(dt);
+    mRenderer.render(width, height, mCamera.entity());
     return 0;
   }
 private:
+  GameState mState;
+  Renderer mRenderer;
   DebugCamera mCamera;
-  //input::mouse_observer mMouse;
-  //input::key_observer mKey;
-  gl::context mCtx;
-  std::unique_ptr<gl::pipeline> mPipeline;
-  std::unique_ptr<gl::mesh> mMesh;
-  std::unique_ptr<gl::mesh_binding> mMeshBinding;
-  std::unique_ptr<gl::uniform_binding> mUniformBinding;
-  gl::command_buffer mCommandBuffer;
+  Sim mSim;
+  std::vector<Entity*> mEntities;
 };
 
 WASM_EXPORT("init")

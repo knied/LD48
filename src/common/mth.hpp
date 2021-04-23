@@ -361,7 +361,7 @@ operator - (matrix<T, R, C> const& m) {
 ////////////////////////////////////////////////////////////////////////////////
 
 template<typename T, unsigned int R, unsigned int N, unsigned int C>
-inline matrix<T, R, N>
+inline auto
 operator * (matrix<T, R, N> const& m0, matrix<T, N, C> const& m1) {
   matrix<T, R, C> result;
   for (unsigned int row = 0; row < R; ++row) {
@@ -712,7 +712,7 @@ template<typename T>
 inline auto transform(quaternion<T> const& q, vector<T, 3> const& v) {
   quaternion<T> V{T(0), v(0), v(1), v(2)};
   quaternion<T> result = q * V * conjugate(q);
-  return vector<T, 3>{result(0), result(1), result(2)};
+  return vector<T, 3>{result(1), result(2), result(3)};
 }
 
 template<typename T>
@@ -939,13 +939,13 @@ inline auto translation_from_matrix(matrix<T,4,4> const& m) {
 template<typename T>
 inline auto transform_point(matrix<T,4,4> const& m, vector<T,3> const& v) {
   auto t = m * vector<T,4>{v(0), v(1), v(2), T(1)};
-  return vector<T,3>(t(0), t(1), t(2));
+  return vector<T,3>{t(0), t(1), t(2)};
 }
     
 template<typename T>
 inline auto transform_vector(matrix<T,4,4> const& m, vector<T, 3> const& v) {
   auto t = m * vector<T,4>{v(0), v(1), v(2), T(0)};
-  return vector<T, 3>(t(0), t(1), t(2));
+  return vector<T, 3>{t(0), t(1), t(2)};
 }
 
 } // namespace mth

@@ -1,5 +1,5 @@
 import os
-Import(['env', 'common_sources'])
+Import(['env', 'common_wasm'])
 
 frontend_env = env.Clone()
 
@@ -34,7 +34,7 @@ bld = Builder(action = builder_frontend,
 frontend_env.Append(BUILDERS = {'Frontend' :  bld})
 
 wasm_sources = ['add.cpp', 'input.cpp', 'websocket.cpp', 'graphics.cpp']
-wasm = frontend_env.Wasm('add.wasm', wasm_sources + common_sources)
+wasm = frontend_env.Wasm('add.wasm', wasm_sources + common_wasm)
 
 static_sources = ['main.js', 'main.css', '404.html'] + wasm
 generated = frontend_env.Frontend('whitelist.ini', static_sources)

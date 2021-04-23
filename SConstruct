@@ -54,18 +54,27 @@ def RunProgram(self, name, dependencies, program, args):
         Default('run')
 AddMethod(Environment, RunProgram)
 
+def PrepareWasm(self):
+    self['OBJSUFFIX'] = '.wo'
+    self.Append(CXXFLAGS = ['--target=wasm32-wasi',
+                            '--sysroot=%s' % (env['WASI_SYSROOT']),
+                            '-fvisibility=hidden',
+                            '-fno-exceptions'],
+                LINKFLAGS = ['--target=wasm32-wasi',
+                             '--sysroot=%s' % (env['WASI_SYSROOT']),
+                             '-nostartfiles',
+                             '-Wl,--export-dynamic',
+                             '-Wl,--import-memory',
+                             '-Wl,--no-entry'])
+AddMethod(Environment, PrepareWasm)
+def WasmObjects(self, sources):
+    wasm_env = self.Clone()
+    wasm_env.PrepareWasm()
+    return wasm_env.Object(sources)
+AddMethod(Environment, WasmObjects)
 def Wasm(self, target, sources):
     wasm_env = self.Clone()
-    wasm_env.Append(CXXFLAGS = ['--target=wasm32-wasi',
-                                '--sysroot=%s' % (env['WASI_SYSROOT']),
-                                '-fvisibility=hidden',
-                                '-fno-exceptions'],
-                    LINKFLAGS = ['--target=wasm32-wasi',
-                                 '--sysroot=%s' % (env['WASI_SYSROOT']),
-                                 '-nostartfiles',
-                                 '-Wl,--export-dynamic',
-                                 '-Wl,--import-memory',
-                                 '-Wl,--no-entry'])
+    wasm_env.PrepareWasm()
     return wasm_env.Program(target, sources)
 AddMethod(Environment, Wasm)
 

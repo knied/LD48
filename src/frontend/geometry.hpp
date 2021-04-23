@@ -92,6 +92,74 @@ generate_sphere(float radius, int detail, vec4 const& color, bool wire = false) 
 }
 
 inline mesh
+generate_box(float x, float y, float z,
+             vec4 const& color, bool wire = false) {
+  auto hx = 0.5f * x;
+  auto hy = 0.5f * y;
+  auto hz = 0.5f * z;
+  mesh out;
+  out.vd = {
+    // front
+    { vec3{ -hx, -hy, -hz }, color },
+    { vec3{ hx, -hy, -hz }, color },
+    { vec3{ hx, hy, -hz }, color },
+    { vec3{ -hx, -hy, -hz }, color },
+    { vec3{ hx, hy, -hz }, color },
+    { vec3{ -hx, hy, -hz }, color },
+    // back
+    { vec3{ -hx, -hy, hz }, color },
+    { vec3{ hx, hy, hz }, color },
+    { vec3{ hx, -hy, hz }, color },
+    { vec3{ -hx, -hy, hz }, color },
+    { vec3{ -hx, hy, hz }, color },
+    { vec3{ hx, hy, hz }, color },
+    // top
+    { vec3{ -hx, hy, -hz }, color },
+    { vec3{ hx, hy, -hz }, color },
+    { vec3{ hx, hy, hz }, color },
+    { vec3{ -hx, hy, -hz }, color },
+    { vec3{ hx, hy, hz }, color },
+    { vec3{ -hx, hy, hz }, color },
+    // bottom
+    { vec3{ -hx, -hy, -hz }, color },
+    { vec3{ hx, -hy, hz }, color },
+    { vec3{ hx, -hy, -hz }, color },
+    { vec3{ -hx, -hy, -hz }, color },
+    { vec3{ -hx, -hy, hz }, color },
+    { vec3{ hx, -hy, hz }, color },
+    // left
+    { vec3{ -hx, -hy, hz }, color },
+    { vec3{ -hx, -hy, -hz }, color },
+    { vec3{ -hx, hy, -hz }, color },
+    { vec3{ -hx, -hy, hz }, color },
+    { vec3{ -hx, hy, -hz }, color },
+    { vec3{ -hx, hy, hz }, color },
+    // right
+    { vec3{ hx, -hy, hz }, color },
+    { vec3{ hx, hy, -hz }, color },
+    { vec3{ hx, -hy, -hz }, color },
+    { vec3{ hx, -hy, hz }, color },
+    { vec3{ hx, hy, hz }, color },
+    { vec3{ hx, hy, -hz }, color },
+  };
+  if (wire) {
+    for (int i = 0; i < 12; ++i) {
+      out.id.push_back(3 * i + 0);
+      out.id.push_back(3 * i + 1);
+      out.id.push_back(3 * i + 1);
+      out.id.push_back(3 * i + 2);
+      out.id.push_back(3 * i + 2);
+      out.id.push_back(3 * i + 0);
+    }
+  } else {
+    for (unsigned int i = 0; i < out.vd.size(); ++i) {
+      out.id.push_back(i);
+    }
+  }
+  return out;
+}
+
+inline mesh
 generate_terrain(int width, int height,
                  vec4 const& color, bool wire = false) {
   mesh out;

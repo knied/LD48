@@ -1,9 +1,11 @@
 Import('env')
 
 env.Append(CPPPATH = ['#' + Dir('.').path])
-common_sources = SConscript('common/SConscript')
-backend = SConscript('backend/SConscript', exports=['common_sources'])
-frontend = SConscript('frontend/SConscript', exports=['common_sources'])
+common = SConscript('common/SConscript')
+common_obj = common[0]
+common_wasm = common[1]
+backend = SConscript('backend/SConscript', exports=['common_obj'])
+frontend = SConscript('frontend/SConscript', exports=['common_wasm'])
 
 env.RunProgram('dev_server', backend + frontend,
                backend, ['--dev', '--root', str(env.Dir(env['PREFIX'] + '/web'))])

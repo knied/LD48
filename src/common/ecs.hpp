@@ -124,7 +124,7 @@ public:
 
   template<typename T, typename... Ts>
   inline coro::generator<entity*>
-  with(component<T>* c, component<Ts>* ...cs) {
+  with(component<T>* c, component<Ts>* ...cs) const {
     for (auto const& item : c->_map) {
       auto e = _entities.at(item.first).get();
       if (e->has(cs...)) {
@@ -133,7 +133,7 @@ public:
     }
   }
   inline coro::generator<entity*>
-  with(std::uint32_t mask) {
+  with(std::uint32_t mask) const {
     for (auto const& item : _entities) {
       auto e = item.second.get();
       if ((e->mask() & mask) == mask) {

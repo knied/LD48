@@ -1,11 +1,14 @@
 Import('env')
 
-common_sources = []
+common_sources = ['gjk.cpp']
+
+common_wasm = env.WasmObjects(common_sources)
+common_obj = env.Object(common_sources)
 
 common_env = env.Clone()
 
 subdirs = ['unittest']
 for subdir in subdirs:
-    SConscript('%s/SConscript'%subdir, exports=['common_env', 'common_sources'])
+    SConscript('%s/SConscript'%subdir, exports=['common_env', 'common_obj'])
 
-Return('common_sources')
+Return('common_obj', 'common_wasm')

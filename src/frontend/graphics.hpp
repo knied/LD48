@@ -79,18 +79,17 @@ enum primitive_type {
 };
 class mesh {
 private:
-  mesh(context ctx, primitive_type pt,
-       void const* vd, unsigned int vds,
-       std::vector<unsigned int> const& id,
-       std::vector<attribute_def> const& defs);
+  void set(void const* vd, unsigned int vds,
+           std::vector<unsigned int> const& id);
 public:
-  template<typename vertex>
   mesh(context ctx, primitive_type pt,
-       std::vector<vertex> const& vd,
-       std::vector<unsigned int> const& id,
-       std::vector<attribute_def> const& defs)
-    : mesh(ctx, pt, vd.data(), sizeof(vertex) * vd.size(), id, defs) {}
+       std::vector<attribute_def> const& defs);
   ~mesh();
+  template<typename vertex>
+  void set(std::vector<vertex> const& vd,
+           std::vector<unsigned int> const& id) {
+    set(vd.data(), sizeof(vertex) * vd.size(), id);
+  }
   int handle() const { return m_handle; }
 private:
   int m_handle;

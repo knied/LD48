@@ -12,11 +12,12 @@ void gl_destroy_pipeline(int p);
 
 WASM_IMPORT("gl", "create_mesh")
 int gl_create_mesh(unsigned int ctx, gl::primitive_type pt,
-                   void const* vd, unsigned int vds,
-                   void const* id, unsigned int ids,
                    gl::attribute_def const* defv, unsigned int defc);
 WASM_IMPORT("gl", "destroy_mesh")
 void gl_destroy_mesh(int m);
+WASM_IMPORT("gl", "set_mesh")
+void gl_set_mesh(int m, void const* vd, unsigned int vds,
+                 void const* id, unsigned int ids);
 
 WASM_IMPORT("gl", "create_mesh_binding")
 int gl_create_mesh_binding(unsigned int ctx, int m, int p);
@@ -66,16 +67,17 @@ uniform_binding::~uniform_binding() {
 }
 
 mesh::mesh(context ctx, primitive_type pt,
-           void const* vd, unsigned int vds,
-           std::vector<unsigned int> const& id,
            std::vector<attribute_def> const& defs) {
-  m_handle = ::gl_create_mesh(ctx, pt, vd, vds,
-                              id.data(), id.size(),
-                              defs.data(), defs.size());
+  m_handle = ::gl_create_mesh(ctx, pt, defs.data(), defs.size());
 }
 
 mesh::~mesh() {
   ::gl_destroy_mesh(m_handle);
+}
+
+void mesh::set(void const* vd, unsigned int vds,
+               std::vector<unsigned int> const& id) {
+  ::gl_set_mesh(m_handle, vd, vds, id.data(), id.size());
 }
 
 mesh_binding::mesh_binding(context ctx, mesh const* m, pipeline const* p) {

@@ -86,16 +86,21 @@ function AttribDef(size, type, normalize,
     this.stride = stride;
     this.offset = offset;
 }
-function Mesh(gl, vertexData, indexData, primitiveType, attribDefs) {
+function Mesh(gl, primitiveType, attribDefs) {
     this.primitiveType = primitiveType;
     this.attribDefs = attribDefs;
-    this.count = indexData.length;
+    this.count = 0;
     this.vb = gl.createBuffer();
     this.ib = gl.createBuffer();
-    gl.bindBuffer(gl.ARRAY_BUFFER, this.vb);
-    gl.bufferData(gl.ARRAY_BUFFER, vertexData, gl.STATIC_DRAW);
-    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, this.ib);
-    gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, indexData, gl.STATIC_DRAW);
+    const ext = gl.getExtension('OES_vertex_array_object');
+    this.set = function(vertexData, indexData) {
+        this.count = indexData.length;
+        ext.bindVertexArrayOES(null);
+        gl.bindBuffer(gl.ARRAY_BUFFER, this.vb);
+        gl.bufferData(gl.ARRAY_BUFFER, vertexData, gl.STATIC_DRAW);
+        gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, this.ib);
+        gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, indexData, gl.STATIC_DRAW);
+    }
     this.destroy = function() {
         gl.deleteBuffer(this.vb);
         gl.deleteBuffer(this.ib);
@@ -686,12 +691,10 @@ document.addEventListener("DOMContentLoaded", function(event) {
             pipeline.destroy();
             refHeap.del(p);
         },
-        create_mesh: function(ctx, pt, vd, vds, id, ids, defv, defc) {
+        create_mesh: function(ctx, pt, defv, defc) {
             console.log('create_mesh');
             const gl = refHeap.get(ctx);
             const primitiveType = pt == 1 ? gl.TRIANGLES : gl.LINES;
-            const vertexData = new DataView(heap.buffer, vd, vds);
-            const indexData = new Uint32Array(heap.buffer, id, ids);
             const view = new DataView(heap.buffer);
             let attribDefs = {}
             for (let i = 0; i < defc; ++i) {
@@ -704,10 +707,16 @@ document.addEventListener("DOMContentLoaded", function(event) {
                 const normalize = view.getUint32(ptr + 20, true);
                 attribDefs[name] = new AttribDef(size, type, normalize, stride, offset);
             }
-            const mesh = new Mesh(gl, vertexData, indexData,
-                                  primitiveType, attribDefs);
+            const mesh = new Mesh(gl, primitiveType, attribDefs);
             console.log(mesh);
             return refHeap.put(mesh);
+        },
+        set_mesh: function(m, vd, vds, id, ids) {
+            //console.log('set_mesh');
+            const mesh = refHeap.get(m);
+            const vertexData = new DataView(heap.buffer, vd, vds);
+            const indexData = new Uint32Array(heap.buffer, id, ids);
+            mesh.set(vertexData, indexData);
         },
         destroy_mesh: function(m) {
             console.log('destroy_mesh');

@@ -4,7 +4,7 @@
 #include <cassert>
 #include <array>
 
-#define DEBUG_OUTPUT
+//#define DEBUG_OUTPUT
 #ifdef DEBUG_OUTPUT
 #include <iostream>
 #endif
@@ -14,6 +14,8 @@
 namespace gjk {
 
 ////////////////////////////////////////////////////////////////////////////////
+
+bool log = false;
 
 #ifdef DEBUG_OUTPUT
 static std::ostream&
@@ -71,6 +73,15 @@ bool gjk(convex const& c0, convex const& c1, simplex& out) {
       if (mth::length2(v01) < eps) {
         return false; // no collision
       }
+      /*if (mth::dot(v01, dir) < eps) {
+        if (log) {
+          std::cout << out << std::endl;
+          std::cout << support << std::endl;
+          std::cout << "dir1: " << dir << std::endl;
+          std::cout << "dot: " << mth::dot(v01, dir) << std::endl;
+        }
+        return false; // no collision
+        }*/
     } break;
     case 2: { // line
       auto v10 = simplex[0].s - simplex[1].s;
@@ -79,6 +90,16 @@ bool gjk(convex const& c0, convex const& c1, simplex& out) {
       if (mth::length2(normal) / mth::length2(v10) < eps) {
         return false; // no collision
       }
+      /*auto v12 = support.s - simplex[1].s;
+      if (mth::dot(v12, dir) < eps) {
+        if (log) {
+          std::cout << out << std::endl;
+          std::cout << support << std::endl;
+          std::cout << "dir2: " << dir << std::endl;
+          std::cout << "dot: " << mth::dot(v12, dir) << std::endl;
+        }
+        return false; // no collision
+      }*/
     } break;
     case 3: { // triangle
       auto v02 = simplex[2].s - simplex[0].s;
@@ -88,6 +109,16 @@ bool gjk(convex const& c0, convex const& c1, simplex& out) {
       if (mth::dot(normal, v03) < eps) {
         return false; // no collision
       }
+      /*auto v23 = support.s - simplex[2].s;
+      if (mth::dot(v23, dir) < eps) {
+        if (log) {
+          std::cout << out << std::endl;
+          std::cout << support << std::endl;
+          std::cout << "dir3: " << dir << std::endl;
+          std::cout << "dot: " << mth::dot(v23, dir) << std::endl;
+        }
+        return false; // no collision
+        }*/
     } break;
     default:
       //std::cout << n << std::endl;
@@ -102,10 +133,20 @@ bool gjk(convex const& c0, convex const& c1, simplex& out) {
     {
       auto l = mth::length(dir);
       if (l < eps) {
-        // The direction vector is almost zero. We assume the origin to be
-        // contained in the current simplex.
-        std::cout << out << std::endl;
-        return true; // collision
+        // The direction vector is close to zero.
+        // To avoid numerical instabilities, we end here.
+        /*if (log) {
+          std::cout << "dir: " << dir << std::endl;
+          std::cout << "l: " << l << std::endl;
+          std::cout << "out: " << out << std::endl;
+          }*/
+        vec3 p0, p1;
+        closest(out, p0, p1);
+        if (mth::length2(p1 - p0) < eps) {
+          return true; // collision
+        } else {
+          return false; // no collision
+        }
       }
       dir = dir / l;
     }
@@ -385,7 +426,7 @@ line_triangle_test(vec3 const& pl, vec3 const& nl,
 }
 #endif
 
-float separate(convex const& c0, convex const& c1, vec3 const& dir) {
+float lift(convex const& c0, convex const& c1, vec3 const& dir) {
   float constexpr eps = 0.0001f;
   auto ndir = mth::normal(dir);
   auto n = ndir;

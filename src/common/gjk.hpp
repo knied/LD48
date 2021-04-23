@@ -16,6 +16,8 @@ namespace gjk {
 using vec3 = mth::vector<float,3>;
 using mat4 = mth::matrix<float,4,4>;
 
+extern bool log;
+
 struct convex {
   virtual vec3 support(vec3 const& dir) const = 0;
 };
@@ -59,7 +61,7 @@ struct simplex {
 bool gjk(convex const& c0, convex const& c1, simplex& out);
 vec3 epa(convex const& c0, convex const& c1, simplex const& hint); 
 void closest(simplex const& in, vec3& p0, vec3& p1);
-float separate(convex const& c0, convex const& c1, vec3 const& dir);
+float lift(convex const& c0, convex const& c1, vec3 const& dir);
 
 // helper
 void

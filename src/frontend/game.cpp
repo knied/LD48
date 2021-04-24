@@ -80,6 +80,9 @@ public:
   }
 
   void initLevel(int level) {
+    mLevelComplete = false;
+    mGameOver = false;
+    overlay_set_text("");
     auto& state = GameState::instance();
     state.reset();
     { // map
@@ -119,6 +122,8 @@ public:
       // Nothing to do.
       // Player navigates to charging station
       commonInit(vec2{1,1});
+      mGameOver = true;
+      overlay_set_text("<h1>You did it!</h1><h2>Click to Restart</h2>");
     }
     }
   }
@@ -128,7 +133,7 @@ public:
     auto& playerActor = state.player->get(state.actorComp);
     if (playerActor.health <= 0) {
       if (!mGameOver) {
-        overlay_set_text("<h1>Game Over</h1><h2>You did not make it...</h2>");
+        overlay_set_text("<h1>The Ship is Lost!</h1><h2>Click to Restart</h2>");
       }
       mGameOver = true;
       return false;
@@ -156,9 +161,8 @@ public:
     , mProjectileDrawable(mRenderer.createDrawable(geometry::generate_sphere(0.05f, 5, vec4{1,1,1,1}))){
     printf("C Game\n");
     fflush(stdout);
-    overlay_set_text("<h1>Click to Start</h1>");
-
     initLevel(mLevel);
+    overlay_set_text("<h1>Click to Start</h1>");
   }
   ~Game() {
     printf("D Game\n");
@@ -179,10 +183,12 @@ public:
     }
     mFocus = focus;
 
+    if (mGameOver && mMouse.mousedownMain() > 0) {
+      mLevel = 0;
+      initLevel(mLevel);
+    }
     if (mLevelComplete && mMouse.mousedownMain() > 0) {
       initLevel(++mLevel);
-      mLevelComplete = false;
-      overlay_set_text("");
     }
     
     if (mFocus && !mGameOver) {

@@ -28,8 +28,8 @@ struct transformed_convex : public convex {
     , world_to_local(mth::inverse_transformation(trans))
     , c(c) {}
   virtual vec3 support(vec3 const& dir) const override {
-    return mth::transform_point(world_to_local, c->support(
-                                  mth::transform_vector(local_to_world, dir)));
+    return mth::transform_point(local_to_world, c->support(
+                                  mth::transform_vector(world_to_local, dir)));
   }
 private:
   mat4 local_to_world;
@@ -44,6 +44,19 @@ struct sphere : public convex {
   }
 private:
   float radius;
+};
+
+struct box : public convex {
+  box(vec3 const& dimensions) : dimensions(dimensions) {}
+  virtual vec3 support(vec3 const& dir) const override {
+    vec3 result;
+    result(0) = dir(0) > 0 ? dimensions(0) : 0;
+    result(1) = dir(1) > 0 ? dimensions(1) : 0;
+    result(2) = dir(2) > 0 ? dimensions(2) : 0;
+    return result;
+  }
+private:
+  vec3 dimensions;
 };
 
 struct support {

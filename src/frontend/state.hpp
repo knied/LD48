@@ -57,6 +57,8 @@ struct Behavior {
 
 struct Actor {
   vec2 lookDir = vec2{1,0};
+  vec2 move = vec2{0,0};
+  vec2 pos = vec2{0,0};
 };
 
 } // namespace Comp

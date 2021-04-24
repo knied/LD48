@@ -43,10 +43,11 @@ public:
 class Game final {
 public:
   Game(gl::context ctx)
-    : mRenderer(ctx)
+    : mMap(10, 10)
+    , mPlayerBehavior(&mMap)
+    , mRenderer(ctx)
       //, mCamera(vec3{5,3,5})
-    , mSim()
-    , mMap(10, 10) {
+    , mSim() {
     printf("C Game\n");
     fflush(stdout);
     //auto sphere = mRenderer.createDrawable(
@@ -96,8 +97,7 @@ public:
     { // player
       auto drawable = mRenderer.createDrawable(actorMesh());
       auto e = state.scene.spawn();
-      auto& trans = e->add(state.transComp);
-      trans.position = vec3{0.5f, 0.0f, 0.5f};
+      e->add(state.transComp);
       auto& shape = e->add(state.shapeComp);
       shape.drawable = drawable;
       shape.color = vec4{0.2f, 0.2f, 0.8f, 1.0f};
@@ -137,13 +137,13 @@ public:
     return 0;
   }
 private:
+  Map mMap;
   PlayerBehavior mPlayerBehavior;
   PlayerCameraBehavior mPlayerCameraBehavior;
   MyBehavior mMyBehavior;
   Renderer mRenderer;
   //DebugCamera mCamera;
   Sim mSim;
-  Map mMap;
   std::vector<Entity*> mEntities;
 };
 

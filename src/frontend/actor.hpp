@@ -2,6 +2,23 @@
 #define FRONTEND_ACTOR_HPP
 
 #include "geometry.hpp"
+#include "map.hpp"
+
+class ActorBehavior : public Comp::Behavior::OnUpdate {
+public:
+  ActorBehavior(Map* map) : mMap(map) {}
+  virtual void onUpdate(Entity* self, float dt) override {
+    auto& state = GameState::instance();
+    auto& trans = self->get(state.transComp);
+    auto& actor = self->get(state.actorComp);
+    auto move = dt * actor.move;
+    mMap->tryMove(actor.pos, move, 0.2f);
+    actor.pos += move;
+    trans.position = vec3{actor.pos(0), 0.0f, actor.pos(1)};
+  }
+private:
+  Map* mMap;
+};
 
 inline geometry::mesh
 actorMesh() {

@@ -3,29 +3,30 @@
 
 #include "state.hpp"
 #include "input.hpp"
+#include "actor.hpp"
 
-class PlayerBehavior : public Comp::Behavior::OnUpdate {
+class PlayerBehavior : public ActorBehavior {
 public:
-  PlayerBehavior()
-    : mUpKey("KeyW")
+  PlayerBehavior(Map* map)
+    : ActorBehavior(map)
+    , mUpKey("KeyW")
     , mDownKey("KeyS")
     , mLeftKey("KeyA")
     , mRightKey("KeyD") {
   }
   virtual void onUpdate(Entity* self, float dt) override {
+    auto& state = GameState::instance();
+    auto& actor = self->get(state.actorComp);
     int forward = mUpKey.pressed() - mDownKey.pressed();
     int strafe = mRightKey.pressed() - mLeftKey.pressed();
     if (forward != 0 || strafe != 0) {
-      auto& state = GameState::instance();
-      auto& trans = self->get(state.transComp);
-      auto& actor = self->get(state.actorComp);
-
-      vec3 fw = (float)forward * vec3{actor.lookDir(0), 0.0f, actor.lookDir(1)};
-      vec3 sw = (float)strafe * vec3{-actor.lookDir(1), 0.0f, actor.lookDir(0)};
-      vec3 dir = mth::normal(fw + sw);
-      trans.position += 2.0f * dt * dir;
-      trans.position(1) = 0;
+      vec2 fw = (float)forward * actor.lookDir;
+      vec2 sw = (float)strafe * vec2{-actor.lookDir(1), actor.lookDir(0)};
+      actor.move = 2.0f * mth::normal(fw + sw);
+    } else {
+      actor.move = vec2{0,0};
     }
+    ActorBehavior::onUpdate(self, dt);
   }
 private:
   input::key_observer mUpKey, mDownKey, mLeftKey, mRightKey;
@@ -46,8 +47,8 @@ public:
     if (mAngle(1) < -0.4f * mth::pi) {
       mAngle(1) = -0.4f * mth::pi;
     }
-    if (mAngle(1) > -0.1f * mth::pi) {
-      mAngle(1) = -0.1f * mth::pi;
+    if (mAngle(1) > -0.15f * mth::pi) {
+      mAngle(1) = -0.15f * mth::pi;
     }
     
     auto& state = GameState::instance();

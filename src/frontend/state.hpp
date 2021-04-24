@@ -64,6 +64,7 @@ struct Actor {
   vec2 pos = vec2{0,0};
   float hitAnim = 0.0f;
   float deathAnim = 1.0f;
+  float cooldown = 0.0f;
 };
 
 struct Projectile {

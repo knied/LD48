@@ -16,6 +16,9 @@
 #include <iostream>
 std::ios_base::Init* _ios_init_workaround = nullptr;
 
+WASM_IMPORT("overlay", "set_text")
+int overlay_set_text(char const* text);
+
 class MyBehavior : public Comp::Behavior::OnUpdate
                  , public Comp::Behavior::OnContact {
 public:
@@ -52,6 +55,7 @@ public:
     , mRenderer(ctx) {
     printf("C Game\n");
     fflush(stdout);
+    overlay_set_text("<h1>Click to Start</h1>");
 
     auto actorDrawable = mRenderer.createDrawable(actorMesh());
     auto projectileDrawable = mRenderer.createDrawable(
@@ -123,12 +127,28 @@ public:
     printf("D Game\n");
     fflush(stdout);
   }
-  int render(float dt, unsigned int width, unsigned int height) {
-    auto& state = GameState::instance();
-    for (auto e : state.scene.with(state.behaviorComp)) {
-      auto& behavior = e->get(state.behaviorComp);
-      if (behavior.onUpdateHandler != nullptr) {
-        behavior.onUpdateHandler->onUpdate(e, dt);
+  void onLostFocus() {
+    overlay_set_text("<h1>Paused</h1><h2>Click to Continue</h2>");
+  }
+  void onGainedFocus() {
+    overlay_set_text("");
+  }
+  int render(float dt, unsigned int width, unsigned int height, bool focus) {
+    if (focus && !mFocus) {
+      onGainedFocus();
+    }
+    if (!focus && mFocus) {
+      onLostFocus();
+    }
+    mFocus = focus;
+    
+    if (mFocus) {
+      auto& state = GameState::instance();
+      for (auto e : state.scene.with(state.behaviorComp)) {
+        auto& behavior = e->get(state.behaviorComp);
+        if (behavior.onUpdateHandler != nullptr) {
+          behavior.onUpdateHandler->onUpdate(e, dt);
+        }
       }
     }
     mRenderer.render(width, height);
@@ -143,6 +163,7 @@ private:
   MyBehavior mMyBehavior;
   Renderer mRenderer;
   std::vector<Entity*> mEntities;
+  bool mFocus = false;
 };
 
 WASM_EXPORT("init")
@@ -156,8 +177,8 @@ void release(void* udata) {
   delete _ios_init_workaround;
 }
 WASM_EXPORT("render")
-int render(void* udata, float dt, unsigned int width, unsigned int height) {
-  return reinterpret_cast<Game*>(udata)->render(dt, width, height);
+int render(void* udata, float dt, unsigned int width, unsigned int height, bool focus) {
+  return reinterpret_cast<Game*>(udata)->render(dt, width, height, focus);
 }
 
 /*WebSocket* gSocket = nullptr;

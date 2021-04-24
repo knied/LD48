@@ -17,18 +17,22 @@ public:
   virtual void onUpdate(Entity* self, float dt) override {
     auto& state = GameState::instance();
     auto& actor = self->get(state.actorComp);
-    int forward = mUpKey.pressed() - mDownKey.pressed();
-    int strafe = mRightKey.pressed() - mLeftKey.pressed();
-    if (forward != 0 || strafe != 0) {
-      vec2 fw = (float)forward * actor.lookDir;
-      vec2 sw = (float)strafe * vec2{-actor.lookDir(1), actor.lookDir(0)};
-      actor.move = 2.0f * mth::normal(fw + sw);
-    } else {
-      actor.move = vec2{0,0};
+    if (actor.health > 0) {
+      int forward = mUpKey.pressed() - mDownKey.pressed();
+      int strafe = mRightKey.pressed() - mLeftKey.pressed();
+      if (forward != 0 || strafe != 0) {
+        vec2 fw = (float)forward * actor.lookDir;
+        vec2 sw = (float)strafe * vec2{-actor.lookDir(1), actor.lookDir(0)};
+        actor.move = 2.0f * mth::normal(fw + sw);
+      } else {
+        actor.move = vec2{0,0};
+      }
     }
     ActorBehavior::onUpdate(self, dt);
-    if (mMouse.mousedownMain() > 0) {
-      fire(self);
+    if (actor.health > 0) {
+      if (mMouse.mousedownMain() > 0 || mMouse.pressedMain() > 0) {
+        fire(self);
+      }
     }
   }
 private:

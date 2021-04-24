@@ -337,7 +337,8 @@ clientY = touch.clientY;
 function MouseInputObserver(view) {
     this.view = view;
 }
-function MouseInputTracer(canvas, ) {
+function MouseInputTracer(canvas) {
+    this.focus = false;
     let movementX = 0;
     let movementY = 0;
     let clientX = 0;
@@ -346,6 +347,7 @@ function MouseInputTracer(canvas, ) {
     let pressedMain = 0;
     let mousedownSecond = 0;
     let pressedSecond = 0;
+    const me = this;
     const mousemoveFn = function(e) {
         //console.log('mousemove', e);
         movementX += e.movementX;
@@ -355,15 +357,22 @@ function MouseInputTracer(canvas, ) {
     };
     const mousedownFn = function(e) {
         //console.log('mousedown', e);
-        canvas.requestPointerLock = canvas.requestPointerLock;
-        canvas.requestPointerLock();
-        if (e.button == 0) {
-            mousedownMain++;
-            pressedMain = 1;
-        }
-        if (e.button == 2) {
-            mousedownSecond++;
-            pressedSecond = 1;
+        if (me.focus === false) {
+            console.log('requesting focus');
+            canvas.requestPointerLock =
+                canvas.requestPointerLock ||
+	        canvas.mozRequestPointerLock ||
+	        canvas.webkitRequestPointerLock;;
+            canvas.requestPointerLock();
+        } else {
+            if (e.button == 0) {
+                mousedownMain++;
+                pressedMain = 1;
+            }
+            if (e.button == 2) {
+                mousedownSecond++;
+                pressedSecond = 1;
+            }
         }
     };
     const mouseupFn = function(e) {
@@ -426,7 +435,7 @@ function KeyboardInputObserver(view, code) {
 function KeyboardInputTracer() {
     let tracers = {};
     const keydownFn = function(e) {
-        console.log('keydown', e.code);
+        //console.log('keydown', e.code);
         const tracer = tracers[e.code];
         if (tracer !== undefined) {
             tracer.keydown++;
@@ -493,6 +502,8 @@ function KeyboardInputTracer() {
 
 document.addEventListener("DOMContentLoaded", function(event) {
     const canvas = document.body.appendChild(document.createElement('canvas'));
+    const overlay = document.body.appendChild(document.createElement('div'));
+    overlay.setAttribute('id', 'overlay');
     gl = canvas.getContext('webgl2', {antialias: false, powerPreference: 'high-performance'});
     if (!gl) {
         gl = canvas.getContext('webgl');
@@ -510,6 +521,20 @@ document.addEventListener("DOMContentLoaded", function(event) {
         }
     }
     const mouseInputTracer = new MouseInputTracer(canvas);
+    const lockChanged = (event) => {
+        mouseInputTracer.focus =
+            document.pointerLockElement === canvas ||
+            document.mozPointerLockElement === canvas ||
+            document.webkitPointerLockElement === canvas;
+        if (mouseInputTracer.focus === true) {
+            console.log('we have focus');
+        } else {
+            console.log('we lost focus');
+        }
+    };
+    document.addEventListener('pointerlockchange', lockChanged);
+    document.addEventListener('mozpointerlockchange', lockChanged);
+    document.addEventListener('webkitpointerlockchange', lockChanged);
     const keyboardInputTracer = new KeyboardInputTracer();
     let memory = new WebAssembly.Memory({ initial: 8 });
     let heap = new Uint8Array(memory.buffer);
@@ -539,6 +564,12 @@ document.addEventListener("DOMContentLoaded", function(event) {
         wasm.exports.free_buffer(buffer.ptr);
     }
 
+    const overlay_module = {
+        set_text: function(ptr) {
+            const text = wasm_read_c_str(ptr);
+            overlay.innerHTML = text;
+        }
+    };
     const input_module = {
         create_mouse_observer: function(buffer_ptr) {
             const view = new DataView(heap.buffer, buffer_ptr);
@@ -772,6 +803,7 @@ document.addEventListener("DOMContentLoaded", function(event) {
         env: { memory },
         websocket: websocket_module,
         input: input_module,
+        overlay: overlay_module,
         gl: gl_module,
         wasi_snapshot_preview1: wasi_module
     };
@@ -801,7 +833,8 @@ document.addEventListener("DOMContentLoaded", function(event) {
                     prevTime = now;
                     const result = wasm.exports.render(udata, dt,
                                                        gl.drawingBufferWidth,
-                                                       gl.drawingBufferHeight);
+                                                       gl.drawingBufferHeight,
+                                                       mouseInputTracer.focus);
                     if (result === 0) {
                         requestAnimationFrame(this.update);
                     } else {

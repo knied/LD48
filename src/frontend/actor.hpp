@@ -21,6 +21,10 @@ public:
     if (actor.health <= 0) {
       actor.deathAnim *= (1.0f - 2.0f * dt);
     }
+
+    // cooldown
+    actor.cooldown -= dt;
+    if (actor.cooldown < 0) actor.cooldown = 0;
     
     // collisions
     if (actor.health > 0) {
@@ -55,6 +59,8 @@ public:
   void fire(Entity* self) {
     auto& state = GameState::instance();
     auto& actor = self->get(state.actorComp);
+    if (actor.cooldown > 0.01f) return;
+    actor.cooldown = 0.25f;
     Entity* bullet = state.projectiles[state.nextProjectile++];
     if (state.nextProjectile >= state.projectiles.size()) state.nextProjectile = 0;
     auto& projectile = bullet->get(state.projectileComp);
@@ -62,6 +68,24 @@ public:
     projectile.move = 6.0f * actor.lookDir;
     projectile.damage = 20;
     projectile.faction = actor.faction;
+  }
+
+  void melee(Entity* self) {
+    float const radius = 0.2f;
+    auto& state = GameState::instance();
+    auto& actor = self->get(state.actorComp);
+    if (actor.cooldown > 0.01f) return;
+    actor.cooldown = 0.25f;
+    for (auto other : state.scene.with(state.actorComp)) {
+      if (other == self) continue;
+      auto& otherActor = other->get(state.actorComp);
+      if (otherActor.health <= 0) continue;
+      if (otherActor.faction == actor.faction) continue;
+      if (mth::length(otherActor.pos - actor.pos) < 3.0f * radius) {
+        otherActor.health -= 10;
+        otherActor.hitAnim = 1.0f;
+      }
+    }
   }
 private:
   Map* mMap;

@@ -15,11 +15,15 @@ public:
     
     auto& state = GameState::instance();
     auto& actor = self->get(state.actorComp);
-    auto& playerActor = state.player->get(state.actorComp);
-    if (mth::length(playerActor.pos - actor.pos) < aggroRange) {
-      actor.move = mth::normal(playerActor.pos - actor.pos);
-    } else {
-      actor.move = vec2{0,0};
+    if (actor.health > 0) {
+      auto& playerActor = state.player->get(state.actorComp);
+      auto dist = mth::length(playerActor.pos - actor.pos);
+      if (dist < aggroRange && dist > 0.2f) {
+        actor.move = mth::normal(playerActor.pos - actor.pos);
+      } else {
+        actor.move = vec2{0,0};
+      }
+      melee(self);
     }
     ActorBehavior::onUpdate(self, dt);
   }

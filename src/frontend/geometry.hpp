@@ -36,6 +36,7 @@ normal_on_sphere(float phi, float theta) {
 inline mesh
 generate_sphere(float radius, int detail, vec4 const& color, bool wire = false) {
   mesh out;
+  out.lines = wire;
   if (detail < 3) {
     detail = 3;
   }

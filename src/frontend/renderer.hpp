@@ -122,7 +122,7 @@ void main() {\n\
         mth::transpose(vp * world(e, state.transComp)),
         shape.color
       };
-      if (shape.drawable != nullptr) {
+      if (shape.drawable != nullptr && shape.visible == true) {
         mCommandBuffer.set_mesh(shape.drawable->binding());
         mCommandBuffer.set_uniforms(mUniformBinding.get(), u);
         mCommandBuffer.draw();

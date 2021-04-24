@@ -26,6 +26,7 @@ struct Camera {
 struct Shape {
   vec4 color = vec4{1,1,1,1};
   Drawable const* drawable = nullptr;
+  bool visible = true;
 };
 
 struct Physical {
@@ -56,7 +57,18 @@ struct Behavior {
 };
 
 struct Actor {
+  int faction = 0;
+  int health = 100;
   vec2 lookDir = vec2{1,0};
+  vec2 move = vec2{0,0};
+  vec2 pos = vec2{0,0};
+  float hitAnim = 0.0f;
+  float deathAnim = 1.0f;
+};
+
+struct Projectile {
+  int faction = 0;
+  int damage = 0;
   vec2 move = vec2{0,0};
   vec2 pos = vec2{0,0};
 };
@@ -69,6 +81,7 @@ using PhysicalComponent = ecs::component<Comp::Physical>;
 using TransformationComponent = ecs::component<Comp::Transformation>;
 using BehaviorComponent = ecs::component<Comp::Behavior>;
 using ActorComponent = ecs::component<Comp::Actor>;
+using ProjectileComponent = ecs::component<Comp::Projectile>;
 
 struct GameState {
   ecs::scene scene;
@@ -78,8 +91,11 @@ struct GameState {
   TransformationComponent* transComp;
   BehaviorComponent* behaviorComp;
   ActorComponent* actorComp;
+  ProjectileComponent* projectileComp;
   Entity* player = nullptr;
   Entity* camera = nullptr;
+  std::vector<Entity*> projectiles;
+  std::size_t nextProjectile = 0;
 
   static GameState& instance() {
     static GameState i;
@@ -94,6 +110,7 @@ private:
     transComp = scene.create_component<Comp::Transformation>();
     behaviorComp = scene.create_component<Comp::Behavior>();
     actorComp = scene.create_component<Comp::Actor>();
+    projectileComp = scene.create_component<Comp::Projectile>();
   } 
 };
 

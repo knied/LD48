@@ -5,6 +5,7 @@
 #include "actor.hpp"
 #include "player.hpp"
 #include "alien.hpp"
+#include "projectile.hpp"
 
 #include "wasm.h"
 #include <stdio.h>
@@ -47,11 +48,14 @@ public:
     : mMap(10, 10)
     , mPlayerBehavior(&mMap)
     , mAlienBehavior(&mMap)
+    , mProjectileBehavior(&mMap)
     , mRenderer(ctx) {
     printf("C Game\n");
     fflush(stdout);
 
     auto actorDrawable = mRenderer.createDrawable(actorMesh());
+    auto projectileDrawable = mRenderer.createDrawable(
+      geometry::generate_sphere(0.05f, 5, vec4{1,1,1,1}));
 
     auto& state = GameState::instance();
     { // follow camera
@@ -96,7 +100,22 @@ public:
       auto& behavior = e->add(state.behaviorComp);
       behavior.onUpdateHandler = &mAlienBehavior;
       auto& actor = e->add(state.actorComp);
+      actor.faction = 1;
       actor.pos = vec2{2.0f, 5.0f};
+      mEntities.push_back(e);
+    }
+
+    for (int i = 0; i < 10; ++i) { // projectiles
+      auto e = state.scene.spawn();
+      e->add(state.transComp);
+      auto& shape = e->add(state.shapeComp);
+      shape.drawable = projectileDrawable;
+      shape.color = vec4{0.9f, 1.0f, 0.7f, 1.0f};
+      auto& behavior = e->add(state.behaviorComp);
+      behavior.onUpdateHandler = &mProjectileBehavior;
+      auto& projectile = e->add(state.projectileComp);
+      projectile.damage = 0; // inactive
+      state.projectiles.push_back(e);
       mEntities.push_back(e);
     }
   }
@@ -119,6 +138,7 @@ private:
   Map mMap;
   PlayerBehavior mPlayerBehavior;
   AlienBehavior mAlienBehavior;
+  ProjectileBehavior mProjectileBehavior;
   PlayerCameraBehavior mPlayerCameraBehavior;
   MyBehavior mMyBehavior;
   Renderer mRenderer;

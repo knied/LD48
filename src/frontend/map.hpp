@@ -47,7 +47,7 @@ public:
     return at(x, y);
   }
 
-  void tryMove(vec2 const& curr, vec2& move, float r) const {
+  bool tryMove(vec2 const& curr, vec2& move, float r) const {
     /*if (at(curr).type == Tile::Wall) {
       // Actor is stuck in wall. Let them escape.
       return;
@@ -65,16 +65,17 @@ public:
     gjk::transformed_convex actor(mActor, &sphere);
     gjk::box box{ vec3{1,1,1} };
     //gjk::sphere box{ 0.5f };
+    bool collision = false;
     for (int x = cx - 1; x <= cx + 1; ++x) {
       for (int y = cy - 1; y <= cy + 1; ++y) {
-        if (x == cx && y == cy) continue;
+        //if (x == cx && y == cy) continue;
         if (at(x, y).type != Tile::Wall) continue;
         auto wallPos = vec3{ (float)x, 0.5f, (float)y };
         auto mWall = mth::translation(wallPos);
         gjk::transformed_convex wall(mWall, &box);
         gjk::simplex simplex;
         if (gjk::gjk(actor, wall, simplex)) {
-          // ignore
+          collision = true;
         } else {
           vec3 p0, p1;
           gjk::closest(simplex, p0, p1);
@@ -88,10 +89,12 @@ public:
               move = move - dot * normal2;
             }
             dbg::gizmos::instance().drawLine(p0, p1, vec4{1, 0, 0, 1});
+            collision = true;
           }
         }
       }
     }
+    return collision;
   }
 
   geometry::mesh mesh() const {

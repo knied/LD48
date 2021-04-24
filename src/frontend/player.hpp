@@ -27,9 +27,13 @@ public:
       actor.move = vec2{0,0};
     }
     ActorBehavior::onUpdate(self, dt);
+    if (mMouse.mousedownMain() > 0) {
+      fire(self);
+    }
   }
 private:
   input::key_observer mUpKey, mDownKey, mLeftKey, mRightKey;
+  input::mouse_observer mMouse;
 };
 
 class PlayerCameraBehavior : public Comp::Behavior::OnUpdate {

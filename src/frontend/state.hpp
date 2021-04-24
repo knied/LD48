@@ -13,6 +13,8 @@ using rot3 = mth::quaternion<float>;
 using Scene = ecs::scene;
 using Entity = ecs::entity;
 
+class Drawable;
+
 namespace Comp {
 
 struct Camera {
@@ -23,13 +25,14 @@ struct Camera {
 
 struct Shape {
   vec4 color = vec4{1,1,1,1};
+  Drawable const* drawable = nullptr;
 };
 
 struct Physical {
-  enum Type { Static, Collider, Lifter };
+  enum Type { Static, Collider };
   Type type = Static;
   int contacts = 0;
-  float radius = 1.0f;
+  float radius = 1.0f; // FIXME: replace with arbitrary convex
 };
 
 struct Transformation {
@@ -43,13 +46,17 @@ struct Transformation {
 
 struct Behavior {
   struct OnUpdate {
-    virtual void onUpdate(float dt) = 0;
+    virtual void onUpdate(Entity* self, float dt) = 0;
   };
   struct OnContact {
     virtual void onContact(Entity* self, Entity* other) = 0;
   };
   OnUpdate* onUpdateHandler = nullptr;
   OnContact* onContactHandler = nullptr;
+};
+
+struct Actor {
+  vec2 lookDir = vec2{1,0};
 };
 
 } // namespace Comp
@@ -59,6 +66,7 @@ using ShapeComponent = ecs::component<Comp::Shape>;
 using PhysicalComponent = ecs::component<Comp::Physical>;
 using TransformationComponent = ecs::component<Comp::Transformation>;
 using BehaviorComponent = ecs::component<Comp::Behavior>;
+using ActorComponent = ecs::component<Comp::Actor>;
 
 struct GameState {
   ecs::scene scene;
@@ -67,14 +75,24 @@ struct GameState {
   PhysicalComponent* physicalComp;
   TransformationComponent* transComp;
   BehaviorComponent* behaviorComp;
+  ActorComponent* actorComp;
+  Entity* player = nullptr;
+  Entity* camera = nullptr;
 
+  static GameState& instance() {
+    static GameState i;
+    return i;
+  }
+  
+private:
   GameState() {
     cameraComp = scene.create_component<Comp::Camera>();
     shapeComp = scene.create_component<Comp::Shape>();
     physicalComp = scene.create_component<Comp::Physical>();
     transComp = scene.create_component<Comp::Transformation>();
     behaviorComp = scene.create_component<Comp::Behavior>();
-  }
+    actorComp = scene.create_component<Comp::Actor>();
+  } 
 };
 
 static mat4

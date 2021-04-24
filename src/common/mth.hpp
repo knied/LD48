@@ -884,8 +884,8 @@ inline auto normal_matrix(matrix<T, 4, 4> const& mv) {
 
 template<typename T>
 inline auto look_at_matrix(vector<T, 3> const& eye,
-                               vector<T, 3> const& at,
-                               vector<T, 3> const& up) {
+                           vector<T, 3> const& at,
+                           vector<T, 3> const& up) {
   vector<T, 3> zaxis = normal(at - eye);
   vector<T, 3> xaxis = normal(cross(up, zaxis));
   vector<T, 3> yaxis = cross(zaxis, xaxis);

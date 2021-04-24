@@ -6,23 +6,25 @@
 
 class DebugCamera final {
 public:
-  DebugCamera(GameState* state)
-    : mState(state)
-    , mAngle{0,0}
-    , mPos{0,0}
+  DebugCamera(vec3 pos = vec3{0,0,0})
+    : mAngle{0,0}
+    , mPos(pos)
       //, mModel(mth::identity<float,4,4>())
     , mUpKey("KeyW")
     , mDownKey("KeyS")
     , mLeftKey("KeyA")
     , mRightKey("KeyD") {
-    mEntity = mState->scene.spawn();
-    mEntity->add(mState->cameraComp);
-    mEntity->add(mState->transComp);
+    auto& state = GameState::instance();
+    mEntity = state.scene.spawn();
+    mEntity->add(state.cameraComp);
+    mEntity->add(state.transComp);
   }
   ~DebugCamera() {
-    mState->scene.despawn(mEntity);
+    auto& state = GameState::instance();
+    state.scene.despawn(mEntity);
   }
   void update(float dt) {
+    auto& state = GameState::instance();
     auto drot = 0.25f * dt * vec2{
       (float)mMouse.movementX(),
       (float)mMouse.movementY()
@@ -37,7 +39,7 @@ public:
     if (mAngle(1) > 0.5f * mth::pi) {
       mAngle(1) = 0.5f * mth::pi;
     }
-    auto& trans = mEntity->get(mState->transComp);
+    auto& trans = mEntity->get(state.transComp);
     trans.rotation = mth::from_euler(mAngle(1), mAngle(0), 0.0f);
     
     //mModel = mth::rotation();
@@ -63,7 +65,6 @@ public:
     return mModel;
     }*/
 private:
-  GameState* mState;
   Entity* mEntity;
   vec2 mAngle;
   vec3 mPos;

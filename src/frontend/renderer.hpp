@@ -31,11 +31,29 @@ vertex_defs() {
   };
 }
 
+class Drawable final {
+public:
+  Drawable(gl::context ctx, gl::pipeline const* pipeline,
+           geometry::mesh const& mesh) {
+    auto primType = mesh.lines ? gl::PRIMITIVE_LINES : gl::PRIMITIVE_TRIANGLES;
+    mMesh = std::make_unique<gl::mesh>(
+      ctx, primType, vertex_defs());
+    mBinding = std::make_unique<gl::mesh_binding>(
+      ctx, mMesh.get(), pipeline);
+    mMesh->set(mesh.vd, mesh.id);
+  }
+  gl::mesh_binding const* binding() const {
+    return mBinding.get();
+  }
+private:
+  std::unique_ptr<gl::mesh> mMesh;
+  std::unique_ptr<gl::mesh_binding> mBinding;
+};
+
 class Renderer final {
 public:
-  Renderer(gl::context ctx, GameState* state)
+  Renderer(gl::context ctx)
     : mCtx(ctx)
-    , mState(state)
     , mCommandBuffer(mCtx) {
     mPipeline = std::unique_ptr<gl::pipeline>(new gl::pipeline(mCtx, "\
 attribute vec4 a_position;\n\
@@ -57,31 +75,33 @@ void main() {\n\
     mGizmosMeshBinding = std::make_unique<gl::mesh_binding>(
       mCtx, mGizmosMesh.get(), mPipeline.get());
     //auto mesh = geometry::generate_terrain(20, 20, vec4{1,1,1,1}, true);
-    auto mesh = geometry::generate_sphere(1.0f, 16, vec4{1,1,1,1}, true);
+    //auto mesh = geometry::generate_sphere(1.0f, 16, vec4{1,1,1,1}, true);
     //auto mesh = geometry::generate_box(1.0f, 2.0f, 3.0f, vec4{1,1,1,1}, true);
-    mMesh = std::make_unique<gl::mesh>(
-      mCtx, gl::PRIMITIVE_LINES, vertex_defs());
-    mMeshBinding = std::make_unique<gl::mesh_binding>(
-      mCtx, mMesh.get(), mPipeline.get());
-    mMesh->set(mesh.vd, mesh.id);
+    //mMesh = std::make_unique<gl::mesh>(
+    //  mCtx, gl::PRIMITIVE_LINES, vertex_defs());
+    //mMeshBinding = std::make_unique<gl::mesh_binding>(
+    //  mCtx, mMesh.get(), mPipeline.get());
+    //mMesh->set(mesh.vd, mesh.id);
     std::vector<gl::uniform_def> defs {
       { "u_mat", gl::UNIFORM_MF4, offsetof(uniform, mat) },
       { "u_color", gl::UNIFORM_VF4, offsetof(uniform, color) }
     };
     mUniformBinding = std::make_unique<gl::uniform_binding>(mCtx, mPipeline.get(), sizeof(uniform), defs);
   }
-  void render(unsigned int width, unsigned int height, Entity* cam) {
+  void render(unsigned int width, unsigned int height) {
+    auto& state = GameState::instance();
+    auto cam = state.camera;
     mCommandBuffer.set_viewport(0, 0, width, height);
     mCommandBuffer.set_clear_color(0.1f, 0.1f, 0.1f, 1.0f);
     mCommandBuffer.clear(gl::CLEAR_COLOR);
     mCommandBuffer.set_pipeline(mPipeline.get());
 
-    assert(cam->has(mState->cameraComp));
-    assert(cam->has(mState->transComp));
-    auto const& camera = cam->get(mState->cameraComp);
+    assert(cam->has(state.cameraComp));
+    assert(cam->has(state.transComp));
+    auto const& camera = cam->get(state.cameraComp);
     auto projection = mth::perspective_projection<float>(
       width, height, camera.fov, camera.znear, camera.zfar);
-    auto view = mth::inverse(world(cam, mState->transComp));
+    auto view = mth::inverse(world(cam, state.transComp));
     auto vp = projection * view;
 
     { // Gizmos
@@ -96,26 +116,33 @@ void main() {\n\
     }
 
     // Entities
-    for (auto e : mState->scene.with(mState->shapeComp, mState->transComp)) {
-      auto const& shape = e->get(mState->shapeComp);
+    for (auto e : state.scene.with(state.shapeComp, state.transComp)) {
+      auto const& shape = e->get(state.shapeComp);
       uniform u{
-        mth::transpose(vp * world(e, mState->transComp)),
+        mth::transpose(vp * world(e, state.transComp)),
         shape.color
       };
-      mCommandBuffer.set_mesh(mMeshBinding.get());
-      mCommandBuffer.set_uniforms(mUniformBinding.get(), u);
-      mCommandBuffer.draw();
+      if (shape.drawable != nullptr) {
+        mCommandBuffer.set_mesh(shape.drawable->binding());
+        mCommandBuffer.set_uniforms(mUniformBinding.get(), u);
+        mCommandBuffer.draw();
+      }
     }
     mCommandBuffer.commit();
   }
+
+  Drawable* createDrawable(geometry::mesh const& mesh) {
+    mDrawables.push_back(std::make_unique<Drawable>(mCtx, mPipeline.get(), mesh));
+    return mDrawables.back().get();
+  }
 private:
   gl::context mCtx;
-  GameState* mState;
   std::unique_ptr<gl::pipeline> mPipeline;
   std::unique_ptr<gl::mesh> mGizmosMesh;
   std::unique_ptr<gl::mesh_binding> mGizmosMeshBinding;
-  std::unique_ptr<gl::mesh> mMesh;
-  std::unique_ptr<gl::mesh_binding> mMeshBinding;
+  std::vector<std::unique_ptr<Drawable>> mDrawables;
+  //std::unique_ptr<gl::mesh> mMesh;
+  //std::unique_ptr<gl::mesh_binding> mMeshBinding;
   std::unique_ptr<gl::uniform_binding> mUniformBinding;
   gl::command_buffer mCommandBuffer;
 };

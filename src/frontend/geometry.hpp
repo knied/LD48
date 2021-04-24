@@ -15,6 +15,7 @@ using mat4 = mth::matrix<float,4,4>;
 struct vertex { vec3 pos; vec4 color; };
 
 struct mesh {
+  bool lines = true;
   std::vector<vertex> vd;
   std::vector<unsigned int> id;
 };

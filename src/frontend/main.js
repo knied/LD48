@@ -426,7 +426,7 @@ function KeyboardInputObserver(view, code) {
 function KeyboardInputTracer() {
     let tracers = {};
     const keydownFn = function(e) {
-        //console.log('keydown', e);
+        console.log('keydown', e.code);
         const tracer = tracers[e.code];
         if (tracer !== undefined) {
             tracer.keydown++;
@@ -782,6 +782,7 @@ document.addEventListener("DOMContentLoaded", function(event) {
         .then(results => {
             wasm = results.instance;
             gl.enable(gl.DEPTH_TEST);
+            gl.enable(gl.CULL_FACE);
             const ctx = refHeap.put(gl);
             const udata = wasm.exports.init(ctx);
             let prevTime;

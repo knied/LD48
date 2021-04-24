@@ -95,7 +95,11 @@ function Mesh(gl, primitiveType, attribDefs) {
     const ext = gl.getExtension('OES_vertex_array_object');
     this.set = function(vertexData, indexData) {
         this.count = indexData.length;
-        ext.bindVertexArrayOES(null);
+        if (ext !== null) {
+            ext.bindVertexArrayOES(null);
+        } else {
+            gl.bindVertexArray(null);
+        }
         gl.bindBuffer(gl.ARRAY_BUFFER, this.vb);
         gl.bufferData(gl.ARRAY_BUFFER, vertexData, gl.STATIC_DRAW);
         gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, this.ib);

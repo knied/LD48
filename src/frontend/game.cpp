@@ -4,6 +4,7 @@
 #include "map.hpp"
 #include "actor.hpp"
 #include "player.hpp"
+#include "alien.hpp"
 
 #include "wasm.h"
 #include <stdio.h>
@@ -45,45 +46,14 @@ public:
   Game(gl::context ctx)
     : mMap(10, 10)
     , mPlayerBehavior(&mMap)
-    , mRenderer(ctx)
-      //, mCamera(vec3{5,3,5})
-    , mSim() {
+    , mAlienBehavior(&mMap)
+    , mRenderer(ctx) {
     printf("C Game\n");
     fflush(stdout);
-    //auto sphere = mRenderer.createDrawable(
-    //  geometry::generate_sphere(1.0f, 16, vec4{1,1,1,1}, true));
-    
+
+    auto actorDrawable = mRenderer.createDrawable(actorMesh());
+
     auto& state = GameState::instance();
-    /*for (int i = 0; i < 5; ++i) {
-      auto e = state.scene.spawn();
-      auto& trans = e->add(state.transComp);
-      trans.position = vec3{3.0f * i,0,0};
-      auto& shape = e->add(state.shapeComp);
-      shape.color = vec4{0.2f + 0.2f * i, 1.0f, 1.0f, 1.0f};
-      shape.drawable = sphere;
-      e->add(state.physicalComp);
-      //auto& behavior = e->add(state.behaviorComp);
-      //behavior.onUpdateHandler = &mMyBehavior;
-      //behavior.onContactHandler = &mMyBehavior;
-      mEntities.push_back(e);
-    }
-
-    {
-      auto e = state.scene.spawn();
-      auto& trans = e->add(state.transComp);
-      trans.position = vec3{0,-2,-5};
-      trans.parent = mCamera.entity();
-      auto& shape = e->add(state.shapeComp);
-      shape.drawable = sphere;
-      auto& physical = e->add(state.physicalComp);
-      physical.type = Comp::Physical::Collider;
-      auto& behavior = e->add(state.behaviorComp);
-      behavior.onUpdateHandler = &mMyBehavior;
-      behavior.onContactHandler = &mMyBehavior;
-      mEntities.push_back(e);
-      }*/
-
-
     { // follow camera
         auto e = state.scene.spawn();
         e->add(state.transComp);
@@ -95,17 +65,15 @@ public:
     }
     
     { // player
-      auto drawable = mRenderer.createDrawable(actorMesh());
       auto e = state.scene.spawn();
       e->add(state.transComp);
       auto& shape = e->add(state.shapeComp);
-      shape.drawable = drawable;
+      shape.drawable = actorDrawable;
       shape.color = vec4{0.2f, 0.2f, 0.8f, 1.0f};
       auto& behavior = e->add(state.behaviorComp);
       behavior.onUpdateHandler = &mPlayerBehavior;
-      //behavior.onContactHandler = &mPlayerBehavior;
       auto& actor = e->add(state.actorComp);
-      (void)actor;
+      actor.pos = vec2{1.0f, 1.0f};
       mEntities.push_back(e);
       state.player = e;
     }
@@ -118,6 +86,19 @@ public:
       shape.drawable = map;
       mEntities.push_back(e);
     }
+
+    { // alien
+      auto e = state.scene.spawn();
+      e->add(state.transComp);
+      auto& shape = e->add(state.shapeComp);
+      shape.drawable = actorDrawable;
+      shape.color = vec4{0.8f, 0.2f, 0.2f, 1.0f};
+      auto& behavior = e->add(state.behaviorComp);
+      behavior.onUpdateHandler = &mAlienBehavior;
+      auto& actor = e->add(state.actorComp);
+      actor.pos = vec2{2.0f, 5.0f};
+      mEntities.push_back(e);
+    }
   }
   ~Game() {
     printf("D Game\n");
@@ -125,8 +106,6 @@ public:
   }
   int render(float dt, unsigned int width, unsigned int height) {
     auto& state = GameState::instance();
-    //mCamera.update(dt);
-    mSim.update(dt);
     for (auto e : state.scene.with(state.behaviorComp)) {
       auto& behavior = e->get(state.behaviorComp);
       if (behavior.onUpdateHandler != nullptr) {
@@ -139,11 +118,10 @@ public:
 private:
   Map mMap;
   PlayerBehavior mPlayerBehavior;
+  AlienBehavior mAlienBehavior;
   PlayerCameraBehavior mPlayerCameraBehavior;
   MyBehavior mMyBehavior;
   Renderer mRenderer;
-  //DebugCamera mCamera;
-  Sim mSim;
   std::vector<Entity*> mEntities;
 };
 

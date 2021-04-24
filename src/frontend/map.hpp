@@ -19,7 +19,7 @@ public:
     for (int x = 0; x < mWidth; ++x) {
       for (int y = 0; y < mHeight; ++y) {
         Tile& tile = at(x, y);
-        if (x == y) {
+        if (x  > 3 && y > 3) {
           tile.type = Tile::Wall; // just a test
         } else {
           tile.type = Tile::Walkable;

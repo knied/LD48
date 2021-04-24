@@ -49,10 +49,14 @@ struct Behavior {
   struct OnUpdate {
     virtual void onUpdate(Entity* self, float dt) = 0;
   };
+  struct OnTrigger {
+    virtual void onTrigger(Entity* self, Entity* other, bool on) = 0;
+  };
   struct OnContact {
     virtual void onContact(Entity* self, Entity* other) = 0;
   };
   OnUpdate* onUpdateHandler = nullptr;
+  OnTrigger* onTriggerHandler = nullptr;
   OnContact* onContactHandler = nullptr;
 };
 
@@ -74,6 +78,11 @@ struct Projectile {
   vec2 pos = vec2{0,0};
 };
 
+struct Trigger {
+  int id = 0;
+  vec2 pos = vec2{0,0};
+};
+
 } // namespace Comp
 
 using CameraComponent = ecs::component<Comp::Camera>;
@@ -83,6 +92,7 @@ using TransformationComponent = ecs::component<Comp::Transformation>;
 using BehaviorComponent = ecs::component<Comp::Behavior>;
 using ActorComponent = ecs::component<Comp::Actor>;
 using ProjectileComponent = ecs::component<Comp::Projectile>;
+using TriggerComponent = ecs::component<Comp::Trigger>;
 
 struct GameState {
   ecs::scene scene;
@@ -93,18 +103,25 @@ struct GameState {
   BehaviorComponent* behaviorComp;
   ActorComponent* actorComp;
   ProjectileComponent* projectileComp;
+  TriggerComponent* triggerComp;
   Entity* player = nullptr;
   Entity* camera = nullptr;
   std::vector<Entity*> projectiles;
   std::size_t nextProjectile = 0;
+  bool playerOnCharger = false;
 
   static GameState& instance() {
     static GameState i;
     return i;
   }
-  
-private:
-  GameState() {
+
+  void reset() {
+    player = nullptr;
+    camera = nullptr;
+    projectiles.clear();
+    nextProjectile = 0;
+    playerOnCharger = false;
+    scene = ecs::scene();
     cameraComp = scene.create_component<Comp::Camera>();
     shapeComp = scene.create_component<Comp::Shape>();
     physicalComp = scene.create_component<Comp::Physical>();
@@ -112,6 +129,12 @@ private:
     behaviorComp = scene.create_component<Comp::Behavior>();
     actorComp = scene.create_component<Comp::Actor>();
     projectileComp = scene.create_component<Comp::Projectile>();
+    triggerComp = scene.create_component<Comp::Trigger>();
+  }
+  
+private:
+  GameState() {
+    reset();
   } 
 };
 

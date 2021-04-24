@@ -32,6 +32,47 @@ normal_on_sphere(float phi, float theta) {
     cos_theta
   };
 }
+
+inline mesh
+generate_cylinder(float radius, float l, int detail, vec4 const& color) {
+  mesh out;
+  out.lines = false;
+  if (detail < 3) {
+    detail = 3;
+  }
+  for (int t = 0; t < detail; ++t) {
+    auto theta = 2.0f * (float)mth::pi * (float)t / (float)(detail);
+    vec3 normal{mth::sin(theta), 0.0f, mth::cos(theta)};
+    auto position = radius * normal;
+    out.vd.push_back({position, color});
+    out.vd.push_back({position + vec3{0,l,0}, color});
+    
+    out.vd.push_back({position, color});
+    out.vd.push_back({position + vec3{0,l,0}, color});
+  }
+  
+  for (int t = 0; t < detail - 1; ++t) {
+    out.id.push_back(4*t);
+    out.id.push_back(4*t+4);
+    out.id.push_back(4*t+5);
+    out.id.push_back(4*t);
+    out.id.push_back(4*t+5);
+    out.id.push_back(4*t+1);
+    out.id.push_back(4*detail-2);
+    out.id.push_back(4*t+6);
+    out.id.push_back(4*t+2);
+    out.id.push_back(4*detail-1);
+    out.id.push_back(4*t+3);
+    out.id.push_back(4*t+7);
+  }
+  out.id.push_back((4*detail-4));
+  out.id.push_back(0);
+  out.id.push_back(1);
+  out.id.push_back((4*detail-4));
+  out.id.push_back(1);
+  out.id.push_back((4*detail-4)+1);
+  return out;
+}
                                           
 inline mesh
 generate_sphere(float radius, int detail, vec4 const& color, bool wire = false) {

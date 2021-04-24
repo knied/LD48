@@ -131,18 +131,14 @@ void main() {\n\
     mCommandBuffer.commit();
   }
 
-  Drawable* createDrawable(geometry::mesh const& mesh) {
-    mDrawables.push_back(std::make_unique<Drawable>(mCtx, mPipeline.get(), mesh));
-    return mDrawables.back().get();
+  std::unique_ptr<Drawable> createDrawable(geometry::mesh const& mesh) {
+    return std::make_unique<Drawable>(mCtx, mPipeline.get(), mesh);
   }
 private:
   gl::context mCtx;
   std::unique_ptr<gl::pipeline> mPipeline;
   std::unique_ptr<gl::mesh> mGizmosMesh;
   std::unique_ptr<gl::mesh_binding> mGizmosMeshBinding;
-  std::vector<std::unique_ptr<Drawable>> mDrawables;
-  //std::unique_ptr<gl::mesh> mMesh;
-  //std::unique_ptr<gl::mesh_binding> mMeshBinding;
   std::unique_ptr<gl::uniform_binding> mUniformBinding;
   gl::command_buffer mCommandBuffer;
 };

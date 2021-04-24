@@ -5,7 +5,8 @@
 #include "input.hpp"
 #include "actor.hpp"
 
-class PlayerBehavior : public ActorBehavior {
+class PlayerBehavior : public ActorBehavior
+                     , public Comp::Behavior::OnTrigger {
 public:
   PlayerBehavior(Map* map)
     : ActorBehavior(map)
@@ -34,6 +35,10 @@ public:
         fire(self);
       }
     }
+  }
+  virtual void onTrigger(Entity* /*self*/, Entity* /*other*/, bool on) override {
+    auto& state = GameState::instance();
+    state.playerOnCharger = on;
   }
 private:
   input::key_observer mUpKey, mDownKey, mLeftKey, mRightKey;

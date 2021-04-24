@@ -6,6 +6,7 @@
 #include "player.hpp"
 #include "alien.hpp"
 #include "projectile.hpp"
+#include "trigger.hpp"
 
 #include "wasm.h"
 #include <stdio.h>
@@ -19,101 +20,40 @@ std::ios_base::Init* _ios_init_workaround = nullptr;
 WASM_IMPORT("overlay", "set_text")
 int overlay_set_text(char const* text);
 
-class MyBehavior : public Comp::Behavior::OnUpdate
-                 , public Comp::Behavior::OnContact {
-public:
-  virtual void onUpdate(Entity* self, float /*dt*/) override {
-    auto& state = GameState::instance();
-    auto& physical = self->get(state.physicalComp);
-    auto& shape = self->get(state.shapeComp);
-    if (physical.contacts > 0) {
-      shape.color = vec4{1,0,0,1};
-    } else {
-      shape.color = vec4{1,1,1,1};
-    }
-    physical.contacts = 0;
-  }
-  virtual void onContact(Entity* self, Entity* other) override {
-    auto& state = GameState::instance();
-    auto& physical = self->get(state.physicalComp);
-    physical.contacts++;
-
-    if (other->has(state.shapeComp)) {
-      auto& shape = other->get(state.shapeComp);
-      shape.color = vec4{1,0,1,1};
-    }
-  }
-};
-
 class Game final {
 public:
-  Game(gl::context ctx)
-    : mMap(10, 10)
-    , mPlayerBehavior(&mMap)
-    , mAlienBehavior(&mMap)
-    , mProjectileBehavior(&mMap)
-    , mRenderer(ctx) {
-    printf("C Game\n");
-    fflush(stdout);
-    overlay_set_text("<h1>Click to Start</h1>");
-
-    auto actorDrawable = mRenderer.createDrawable(actorMesh());
-    auto projectileDrawable = mRenderer.createDrawable(
-      geometry::generate_sphere(0.05f, 5, vec4{1,1,1,1}));
-
+  void commonInit(vec2 const& playerPos) {
     auto& state = GameState::instance();
     { // follow camera
-        auto e = state.scene.spawn();
-        e->add(state.transComp);
-        e->add(state.cameraComp);
-        auto& behavior = e->add(state.behaviorComp);
-        behavior.onUpdateHandler = &mPlayerCameraBehavior;
-        mEntities.push_back(e);
-        state.camera = e;
+      auto e = state.scene.spawn();
+      e->add(state.transComp);
+      e->add(state.cameraComp);
+      auto& behavior = e->add(state.behaviorComp);
+      behavior.onUpdateHandler = &mPlayerCameraBehavior;
+      mEntities.push_back(e);
+      state.camera = e;
     }
     
     { // player
       auto e = state.scene.spawn();
       e->add(state.transComp);
       auto& shape = e->add(state.shapeComp);
-      shape.drawable = actorDrawable;
+      shape.drawable = mActorDrawable.get();
       shape.color = vec4{0.2f, 0.2f, 0.8f, 1.0f};
       auto& behavior = e->add(state.behaviorComp);
       behavior.onUpdateHandler = &mPlayerBehavior;
+      behavior.onTriggerHandler = &mPlayerBehavior;
       auto& actor = e->add(state.actorComp);
-      actor.pos = vec2{1.0f, 1.0f};
+      actor.pos = playerPos;
       mEntities.push_back(e);
       state.player = e;
-    }
-
-    { // map
-      auto map = mRenderer.createDrawable(mMap.mesh());
-      auto e = state.scene.spawn();
-      e->add(state.transComp);
-      auto& shape = e->add(state.shapeComp);
-      shape.drawable = map;
-      mEntities.push_back(e);
-    }
-
-    { // alien
-      auto e = state.scene.spawn();
-      e->add(state.transComp);
-      auto& shape = e->add(state.shapeComp);
-      shape.drawable = actorDrawable;
-      shape.color = vec4{0.8f, 0.2f, 0.2f, 1.0f};
-      auto& behavior = e->add(state.behaviorComp);
-      behavior.onUpdateHandler = &mAlienBehavior;
-      auto& actor = e->add(state.actorComp);
-      actor.faction = 1;
-      actor.pos = vec2{2.0f, 5.0f};
-      mEntities.push_back(e);
     }
 
     for (int i = 0; i < 10; ++i) { // projectiles
       auto e = state.scene.spawn();
       e->add(state.transComp);
       auto& shape = e->add(state.shapeComp);
-      shape.drawable = projectileDrawable;
+      shape.drawable = mProjectileDrawable.get();
       shape.color = vec4{0.9f, 1.0f, 0.7f, 1.0f};
       auto& behavior = e->add(state.behaviorComp);
       behavior.onUpdateHandler = &mProjectileBehavior;
@@ -122,6 +62,103 @@ public:
       state.projectiles.push_back(e);
       mEntities.push_back(e);
     }
+  }
+
+  void spawnAlien(vec2 const& pos) {
+    auto& state = GameState::instance();
+    auto e = state.scene.spawn();
+    e->add(state.transComp);
+    auto& shape = e->add(state.shapeComp);
+    shape.drawable = mActorDrawable.get();
+    shape.color = vec4{0.8f, 0.2f, 0.2f, 1.0f};
+    auto& behavior = e->add(state.behaviorComp);
+    behavior.onUpdateHandler = &mAlienBehavior;
+    auto& actor = e->add(state.actorComp);
+    actor.faction = 1;
+    actor.pos = pos;
+    mEntities.push_back(e);
+  }
+
+  void initLevel(int level) {
+    auto& state = GameState::instance();
+    state.reset();
+    { // map
+      mMapDrawable = mRenderer.createDrawable(mMap.mesh());
+      auto e = state.scene.spawn();
+      e->add(state.transComp);
+      auto& shape = e->add(state.shapeComp);
+      shape.drawable = mMapDrawable.get();
+      mEntities.push_back(e);
+    }
+
+    { // charger
+      mChargerDrawable = mRenderer.createDrawable(geometry::generate_cylinder(0.4f, 0.1f, 12, vec4{0.8f, 0.8f, 1.0f, 1.0f}));
+      auto e = state.scene.spawn();
+      e->add(state.transComp);
+      auto& shape = e->add(state.shapeComp);
+      shape.drawable = mChargerDrawable.get();
+      auto& trigger = e->add(state.triggerComp);
+      trigger.pos = vec2{5,2};
+      auto& behavior = e->add(state.behaviorComp);
+      behavior.onUpdateHandler = &mTriggerBehavior;
+    }
+
+    switch (level) {
+    case 0: {
+      // Nothing to do.
+      // Player navigates to charging station
+      commonInit(vec2{1,1});
+    } break;
+    case 1: {
+      // Invaders! Kill alien.
+      // Player navigates to charging station
+      commonInit(vec2{1,1});
+      spawnAlien(vec2{2,5});
+    } break;
+    default: {
+      // Nothing to do.
+      // Player navigates to charging station
+      commonInit(vec2{1,1});
+    }
+    }
+  }
+
+  bool checkObjectives() {
+    auto& state = GameState::instance();
+    auto& playerActor = state.player->get(state.actorComp);
+    if (playerActor.health <= 0) {
+      if (!mGameOver) {
+        overlay_set_text("<h1>Game Over</h1><h2>You did not make it...</h2>");
+      }
+      mGameOver = true;
+      return false;
+    }
+    
+    bool tasksDone = true;
+    // Are all aliens dead?
+    for (auto e : state.scene.with(state.actorComp)) {
+      auto& actor = e->get(state.actorComp);
+      if (actor.faction != 0 && actor.health > 0) {
+        tasksDone = false;
+      }
+    }
+    
+    return tasksDone && state.playerOnCharger;
+  }
+  
+  Game(gl::context ctx)
+    : mMap(10, 10)
+    , mPlayerBehavior(&mMap)
+    , mAlienBehavior(&mMap)
+    , mProjectileBehavior(&mMap)
+    , mRenderer(ctx)
+    , mActorDrawable(mRenderer.createDrawable(actorMesh()))
+    , mProjectileDrawable(mRenderer.createDrawable(geometry::generate_sphere(0.05f, 5, vec4{1,1,1,1}))){
+    printf("C Game\n");
+    fflush(stdout);
+    overlay_set_text("<h1>Click to Start</h1>");
+
+    initLevel(mLevel);
   }
   ~Game() {
     printf("D Game\n");
@@ -141,14 +178,32 @@ public:
       onLostFocus();
     }
     mFocus = focus;
+
+    if (mLevelComplete && mMouse.mousedownMain() > 0) {
+      initLevel(++mLevel);
+      mLevelComplete = false;
+      overlay_set_text("");
+    }
     
-    if (mFocus) {
+    if (mFocus && !mGameOver) {
       auto& state = GameState::instance();
       for (auto e : state.scene.with(state.behaviorComp)) {
         auto& behavior = e->get(state.behaviorComp);
         if (behavior.onUpdateHandler != nullptr) {
           behavior.onUpdateHandler->onUpdate(e, dt);
         }
+      }
+      if (checkObjectives()) {
+        // Level complete
+        if (!mLevelComplete) {
+          overlay_set_text("<h1>Good Work!</h1><h2>Click to go to Standby</h2>");
+        }
+        mLevelComplete = true;
+      } else {
+        if (mLevelComplete) {
+          overlay_set_text("");
+        }
+        mLevelComplete = false;
       }
     }
     mRenderer.render(width, height);
@@ -159,11 +214,19 @@ private:
   PlayerBehavior mPlayerBehavior;
   AlienBehavior mAlienBehavior;
   ProjectileBehavior mProjectileBehavior;
+  TriggerBehavior mTriggerBehavior;
   PlayerCameraBehavior mPlayerCameraBehavior;
-  MyBehavior mMyBehavior;
   Renderer mRenderer;
+  std::unique_ptr<Drawable> mActorDrawable;
+  std::unique_ptr<Drawable> mProjectileDrawable;
+  std::unique_ptr<Drawable> mMapDrawable;
+  std::unique_ptr<Drawable> mChargerDrawable;
   std::vector<Entity*> mEntities;
+  int mLevel = 0;
   bool mFocus = false;
+  bool mGameOver = false;
+  bool mLevelComplete = false;
+  input::mouse_observer mMouse;
 };
 
 WASM_EXPORT("init")

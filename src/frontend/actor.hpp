@@ -108,30 +108,30 @@ actorMesh() {
   out.vd.push_back({ vec3{0,b,a}, color }); // 5
 
   out.id.push_back(0);
-  out.id.push_back(4);
-  out.id.push_back(1);
   out.id.push_back(1);
   out.id.push_back(4);
-  out.id.push_back(2);
+  out.id.push_back(1);
   out.id.push_back(2);
   out.id.push_back(4);
-  out.id.push_back(3);
+  out.id.push_back(2);
   out.id.push_back(3);
   out.id.push_back(4);
+  out.id.push_back(3);
   out.id.push_back(0);
+  out.id.push_back(4);
 
   out.id.push_back(0);
-  out.id.push_back(1);
   out.id.push_back(5);
   out.id.push_back(1);
-  out.id.push_back(2);
+  out.id.push_back(1);
   out.id.push_back(5);
   out.id.push_back(2);
-  out.id.push_back(3);
+  out.id.push_back(2);
   out.id.push_back(5);
   out.id.push_back(3);
+  out.id.push_back(3);
+  out.id.push_back(5);
   out.id.push_back(0);
-  out.id.push_back(5);
 
   return out;
 }

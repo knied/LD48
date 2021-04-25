@@ -19,12 +19,13 @@ struct mesh {
   std::vector<vertex> vd;
   std::vector<unsigned int> id;
 
-  void calculateNormals() {
+  void calculateNormals(std::size_t first = 0, std::size_t last = 0) {
+    if (last == 0) last = id.size();
     assert(lines == false);
     for (auto& v : vd) {
       v.norm = vec3{0,0,0};
     }
-    for (std::size_t i = 0; i < id.size(); i += 3) {
+    for (std::size_t i = first; i < last; i += 3) {
       auto& p0 = vd[i + 0].pos;
       auto& p1 = vd[i + 1].pos;
       auto& p2 = vd[i + 2].pos;
@@ -36,6 +37,19 @@ struct mesh {
     for (auto& v : vd) {
       v.norm = mth::normal(v.norm);
     }
+  }
+
+  static mesh merge(mesh const& m0, mesh const& m1) {
+    mesh out;
+    out.lines = m0.lines;
+    out.vd = m0.vd;
+    out.id = m0.id;
+    auto idx = m0.vd.size();
+    out.vd.insert(out.vd.end(), m1.vd.begin(), m1.vd.end());
+    for (auto i : m1.id) {
+      out.id.push_back(idx + i);
+    }
+    return out;
   }
 };
 

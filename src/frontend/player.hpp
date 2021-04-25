@@ -4,6 +4,7 @@
 #include "state.hpp"
 #include "input.hpp"
 #include "actor.hpp"
+#include "debug.hpp"
 
 class PlayerBehavior : public ActorBehavior
                      , public Comp::Behavior::OnTrigger {
@@ -13,7 +14,8 @@ public:
     , mUpKey("KeyW")
     , mDownKey("KeyS")
     , mLeftKey("KeyA")
-    , mRightKey("KeyD") {
+    , mRightKey("KeyD")
+    , mUseKey("KeyE"){
   }
   virtual void onUpdate(Entity* self, float dt) override {
     auto& state = GameState::instance();
@@ -34,14 +36,37 @@ public:
       if (mMouse.mousedownMain() > 0 || mMouse.pressedMain() > 0) {
         fire(self);
       }
+
+      // test pathing
+      /*for (auto other : state.scene.with(state.triggerComp)) {
+        auto& trigger = other->get(state.triggerComp);
+        auto p = mMap->nextWaypoint(actor.pos, trigger.pos);
+        dbg::gizmos::instance().drawLine(vec3{actor.pos(0), 0.1f, actor.pos(1)},
+                                         vec3{p(0), 0.1f, p(1)}, vec4{0,0,1,1});
+                                         }*/
     }
   }
-  virtual void onTrigger(Entity* /*self*/, Entity* /*other*/, bool on) override {
+  virtual void onTrigger(Entity* self, Entity* /*other*/, bool on) override {
     auto& state = GameState::instance();
-    state.playerOnCharger = on;
+    auto& instr = self->get(state.instrComp);
+    if (on && state.objectivesDone) {
+      instr.msg = "go to standby";
+      instr.show = true;
+      instr.pressE = true;
+      if (mUseKey.keydown() > 0) {
+        game_play_sound("standby");
+        state.levelComplete = true;
+      }
+    } else if (on && !state.objectivesDone) {
+      instr.msg = "There is more work to be done";
+      instr.show = true;
+      instr.pressE = false;
+    } else {
+      instr.show = false;
+    }
   }
 private:
-  input::key_observer mUpKey, mDownKey, mLeftKey, mRightKey;
+  input::key_observer mUpKey, mDownKey, mLeftKey, mRightKey, mUseKey;
   input::mouse_observer mMouse;
 };
 

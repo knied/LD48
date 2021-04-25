@@ -5,6 +5,34 @@
 #include "graphics.hpp"
 #include "geometry.hpp"
 #include "debug.hpp"
+#include <iostream>
+
+inline geometry::mesh
+markerMesh() {
+  geometry::mesh out;
+  out.lines = false; // triangles
+
+  float h = 0.11f;
+  float a = 0.15f;
+  float b = 0.3f;
+  float c = 0.5f;
+  vec3 norm{0,0,0};
+  vec4 color{1,1,1,1};
+  
+  out.vd.push_back({ vec3{0, h, b}, norm, color });
+  out.vd.push_back({ vec3{0, h, c}, norm, color });
+  out.vd.push_back({ vec3{a, h, a}, norm, color });
+
+  out.vd.push_back({ vec3{0, h, b}, norm, color });
+  out.vd.push_back({ vec3{-a, h, a}, norm, color });
+  out.vd.push_back({ vec3{0, h, c}, norm, color });
+
+  for (std::size_t i = 0; i < out.vd.size(); ++i) {
+    out.id.push_back(i);
+  }
+  out.calculateNormals();
+  return out;
+}
 
 template<typename T, unsigned int R, unsigned int C>
 static constexpr inline unsigned int
@@ -130,6 +158,10 @@ void main() {\n\
     };
     mUniformBinding = std::make_unique<gl::uniform_binding>(mCtx, mPipeline.get(), sizeof(uniform), defs);
     mLightUniformBinding = std::make_unique<gl::uniform_binding>(mCtx, mLightPipeline.get(), sizeof(uniform), defs);
+
+    mMarkerDrawable = std::make_unique<Drawable>(mCtx, mPipeline.get(), markerMesh());
+    //mMarkerDrawable = std::make_unique<Drawable>(mCtx, mPipeline.get(),
+    //  geometry::generate_sphere(0.1f, 8, vec4{1,1,1,1}));
   }
   void render(unsigned int width, unsigned int height) {
     auto& state = GameState::instance();
@@ -153,18 +185,33 @@ void main() {\n\
       auto& mesh = gizmos.mesh();
       mGizmosMesh->set(mesh.vd, mesh.id);
       gizmos.clear();
-      auto nmat = mth::inverse(view);
+      auto nmat = mth::identity<float,4,4>();
       uniform u{ mth::transpose(vp), nmat, vec4{1,1,1,1}, ldir, 0.0f };
       mCommandBuffer.set_mesh(mGizmosMeshBinding.get());
       mCommandBuffer.set_uniforms(mUniformBinding.get(), u);
       mCommandBuffer.draw();
     }
 
+    // Markers
+    for (auto& pair : mMarkers) {
+      (void)pair;
+      auto& p0 = pair.first;
+      auto& p1 = pair.second;
+      auto m = mth::translation(p0) * mth::look_at_matrix(p0, p1, vec3{0,1,0});
+      //auto m = mth::look_at_matrix(p0, p1, vec3{0,1,0}) * mth::translation(p0);
+      auto nmat = mth::identity<float,4,4>();
+      uniform u{ mth::transpose(vp * m), nmat, vec4{1,1,0,1}, ldir, 0.0f };
+      mCommandBuffer.set_mesh(mMarkerDrawable->binding());
+      mCommandBuffer.set_uniforms(mUniformBinding.get(), u);
+      mCommandBuffer.draw();
+    }
+    mMarkers.clear();
+
     mCommandBuffer.set_pipeline(mLightPipeline.get());
     // Entities
     for (auto e : state.scene.with(state.shapeComp, state.transComp)) {
       auto const& shape = e->get(state.shapeComp);
-      auto model = world(e, state.transComp);
+      auto model = world(e, state.transComp) * shape.trans;
       auto nmat = mth::inverse(view * model);
       uniform u{
         mth::transpose(vp * model), nmat, shape.color, ldir, shape.flash
@@ -178,6 +225,10 @@ void main() {\n\
     mCommandBuffer.commit();
   }
 
+  void drawMarker(vec3 const& p0, vec3 const& p1) {
+    mMarkers.push_back(std::make_pair(p0, p1));
+  }
+
   std::unique_ptr<Drawable> createDrawable(geometry::mesh const& mesh) {
     return std::make_unique<Drawable>(mCtx, mLightPipeline.get(), mesh);
   }
@@ -189,6 +240,8 @@ private:
   std::unique_ptr<gl::mesh_binding> mGizmosMeshBinding;
   std::unique_ptr<gl::uniform_binding> mUniformBinding;
   std::unique_ptr<gl::uniform_binding> mLightUniformBinding;
+  std::unique_ptr<Drawable> mMarkerDrawable;
+  std::vector<std::pair<vec3, vec3>> mMarkers;
   gl::command_buffer mCommandBuffer;
 };
 

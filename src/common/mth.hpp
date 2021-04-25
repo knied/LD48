@@ -888,11 +888,11 @@ inline auto look_at_matrix(vector<T, 3> const& eye,
                            vector<T, 3> const& up) {
   vector<T, 3> zaxis = normal(at - eye);
   vector<T, 3> xaxis = normal(cross(up, zaxis));
-  vector<T, 3> yaxis = cross(zaxis, xaxis);
+  vector<T, 3> yaxis = normal(cross(zaxis, xaxis));
   return matrix<T,4,4>{
-    xaxis(0), xaxis(1), xaxis(2), -dot(xaxis, eye),
-    yaxis(0), yaxis(1), yaxis(2), -dot(yaxis, eye),
-    zaxis(0), zaxis(1), zaxis(2), -dot(zaxis, eye),
+    xaxis(0), yaxis(0), zaxis(0), T(0), //-dot(xaxis, eye),
+    xaxis(1), yaxis(1), zaxis(1), T(0), //-dot(yaxis, eye),
+    xaxis(2), yaxis(2), zaxis(2), T(0), //-dot(zaxis, eye),
     T(0), T(0), T(0), T(1)
   };
 }

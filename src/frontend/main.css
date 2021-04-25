@@ -12,12 +12,24 @@ canvas {
     margin: 0;
     font-size: 20pt;
     text-align: center;
-    color: #BBB;
+    text-shadow: 2pt 2pt 2pt #000;
+    color: #FFF;
     position: absolute;
     left: 0;
     top: 50%;
     -ms-transform: translateY(-50%);
     transform: translateY(-50%);
     width: 100%;
+    pointer-events:none;
+}
+#todo {
+    margin: 0;
+    font-size: 14pt;
+    text-align: left;
+    text-shadow: 2pt 2pt 2pt #000;
+    color: #FFF;
+    position: absolute;
+    left: 10pt;
+    top: 10pt;
     pointer-events:none;
 }

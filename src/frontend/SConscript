@@ -36,7 +36,7 @@ frontend_env.Append(BUILDERS = {'Frontend' :  bld})
 wasm_sources = ['game.cpp', 'input.cpp', 'websocket.cpp', 'graphics.cpp']
 wasm = frontend_env.Wasm('game.wasm', wasm_sources + common_wasm)
 
-static_sources = ['main.js', 'main.css', '404.html'] + wasm
+static_sources = ['main.js', 'main.css', '404.html', 'fire.wav', 'hit.wav', 'crew_dead.wav', 'task1.wav', 'task2.wav', 'task3.wav', 'win.wav', 'standby.wav', 'continue.wav', 'danger.wav', 'water.wav'] + wasm
 generated = frontend_env.Frontend('whitelist.ini', static_sources)
 frontend = Install(frontend_env['PREFIX'] + '/web', generated + static_sources)
 

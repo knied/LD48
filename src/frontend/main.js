@@ -341,7 +341,7 @@ clientY = touch.clientY;
 function MouseInputObserver(view) {
     this.view = view;
 }
-function MouseInputTracer(canvas) {
+function MouseInputTracer(canvas, audioContext) {
     this.focus = false;
     let movementX = 0;
     let movementY = 0;
@@ -363,20 +363,20 @@ function MouseInputTracer(canvas) {
         //console.log('mousedown', e);
         if (me.focus === false) {
             console.log('requesting focus');
+            audioContext.resume()
             canvas.requestPointerLock =
                 canvas.requestPointerLock ||
 	        canvas.mozRequestPointerLock ||
 	        canvas.webkitRequestPointerLock;;
             canvas.requestPointerLock();
-        } else {
-            if (e.button == 0) {
-                mousedownMain++;
-                pressedMain = 1;
-            }
-            if (e.button == 2) {
-                mousedownSecond++;
-                pressedSecond = 1;
-            }
+        }
+        if (e.button == 0) {
+            mousedownMain++;
+            pressedMain = 1;
+        }
+        if (e.button == 2) {
+            mousedownSecond++;
+            pressedSecond = 1;
         }
     };
     const mouseupFn = function(e) {
@@ -505,9 +505,41 @@ function KeyboardInputTracer() {
 }
 
 document.addEventListener("DOMContentLoaded", function(event) {
+    let audioContext = undefined;
+    let sounds = {};
+    const loadSound = (name) => fetch(name + '.wav')
+          .then(response => response.arrayBuffer())
+          .then(bytes => audioContext.decodeAudioData(bytes, buffer => sounds[name] = buffer));
+          //.then(response => audioContext.decodeAudioData(response.arrayBuffer(), buffer => sounds[name] = buffer));
+    try {
+	// Fix up for prefixing
+	audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        
+        loadSound('fire');
+        loadSound('hit');
+        loadSound('crew_dead');
+        loadSound('task1');
+        loadSound('task2');
+        loadSound('task3');
+        loadSound('win');
+        loadSound('standby');
+        loadSound('continue');
+        loadSound('danger');
+        loadSound('water');
+    }
+    catch(e) {
+	console.warn("Web Audio API is not supported in this browser");
+    }
+
+    //var oscillator = audioContext.createOscillator(); 
+    //oscillator.connect(audioContext.destination);
+    //oscillator.start(0);
+    
     const canvas = document.body.appendChild(document.createElement('canvas'));
     const overlay = document.body.appendChild(document.createElement('div'));
     overlay.setAttribute('id', 'overlay');
+    const todo = document.body.appendChild(document.createElement('div'));
+    todo.setAttribute('id', 'todo');
     gl = canvas.getContext('webgl2', {antialias: false, powerPreference: 'high-performance'});
     if (!gl) {
         gl = canvas.getContext('webgl');
@@ -524,7 +556,7 @@ document.addEventListener("DOMContentLoaded", function(event) {
             throw 'The WebGL extension OES_vertex_array_object is not supported by your browser :(';
         }
     }
-    const mouseInputTracer = new MouseInputTracer(canvas);
+    const mouseInputTracer = new MouseInputTracer(canvas, audioContext);
     const lockChanged = (event) => {
         mouseInputTracer.focus =
             document.pointerLockElement === canvas ||
@@ -542,7 +574,7 @@ document.addEventListener("DOMContentLoaded", function(event) {
     const keyboardInputTracer = new KeyboardInputTracer();
     let memory = new WebAssembly.Memory({ initial: 8 });
     let heap = new Uint8Array(memory.buffer);
-    let refHeap = new RefHeap(32);
+    let refHeap = new RefHeap(64);
     let wasm = null;
     
     let wasm_read_c_str = function(ptr) {
@@ -568,10 +600,24 @@ document.addEventListener("DOMContentLoaded", function(event) {
         wasm.exports.free_buffer(buffer.ptr);
     }
 
-    const overlay_module = {
-        set_text: function(ptr) {
+    const game_module = {
+        set_text: function(id, ptr) {
             const text = wasm_read_c_str(ptr);
-            overlay.innerHTML = text;
+            if (id == 0) {
+                overlay.innerHTML = text;
+            } else {
+                todo.innerHTML = text;
+            }
+        },
+        play_sound: function(ptr) {
+            const name = wasm_read_c_str(ptr);
+            console.log("play sound: ", name);
+            if (!audioContext) return;
+            var source = audioContext.createBufferSource();
+            source.buffer = sounds[name];
+            source.connect(audioContext.destination);
+            source[source.start ? 'start' : 'noteOn'](0);
+            console.log(source);
         }
     };
     const input_module = {
@@ -807,7 +853,7 @@ document.addEventListener("DOMContentLoaded", function(event) {
         env: { memory },
         websocket: websocket_module,
         input: input_module,
-        overlay: overlay_module,
+        game: game_module,
         gl: gl_module,
         wasi_snapshot_preview1: wasi_module
     };

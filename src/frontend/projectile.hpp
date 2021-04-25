@@ -30,6 +30,11 @@ public:
             otherActor.health -= projectile.damage;
             projectile.damage = 0;
             otherActor.hitAnim = 1.0f;
+            if (otherActor.health <= 0) {
+              game_play_sound("crew_dead");
+            } else {
+              game_play_sound("hit");
+            }
           }
         }
       }

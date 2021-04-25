@@ -16,10 +16,31 @@ public:
     auto& state = GameState::instance();
     auto& actor = self->get(state.actorComp);
     if (actor.health > 0) {
+      vec2 target;
+      float minDist = 10000.0f;
+      bool foundCrew = false;
+      if (!actor.targetPlayer) {
+        for (auto t : state.scene.with(state.crewComp)) {
+          auto& crew = t->get(state.crewComp);
+          if (crew.health > 0) {
+            auto& task = t->get(state.taskComp);
+            auto dist = mth::length(actor.pos - task.pos);
+            if (dist < minDist) {
+              minDist = dist;
+              target = task.pos;
+              foundCrew = true;
+            }
+          }
+        }
+      }
       auto& playerActor = state.player->get(state.actorComp);
-      auto dist = mth::length(playerActor.pos - actor.pos);
-      if (dist < aggroRange && dist > 0.2f) {
-        actor.move = mth::normal(playerActor.pos - actor.pos);
+      auto playerDist = mth::length(playerActor.pos - actor.pos);
+      if (!foundCrew || playerDist < aggroRange) {
+        target = playerActor.pos;
+      }
+      auto wayPoint = mMap->nextWaypoint(actor.pos, target);
+      if (mth::length(wayPoint - actor.pos) > 0.2f) {
+        actor.move = mth::normal(wayPoint - actor.pos);
       } else {
         actor.move = vec2{0,0};
       }

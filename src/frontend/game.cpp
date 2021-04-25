@@ -14,12 +14,10 @@
 #include <string>
 #include <vector>
 #include <cstddef>
+#include <set>
 
 #include <iostream>
 std::ios_base::Init* _ios_init_workaround = nullptr;
-
-WASM_IMPORT("overlay", "set_text")
-int overlay_set_text(char const* text);
 
 class Game final {
 public:
@@ -46,6 +44,7 @@ public:
       behavior.onTriggerHandler = &mPlayerBehavior;
       auto& actor = e->add(state.actorComp);
       actor.pos = playerPos;
+      e->add(state.instrComp);
       mEntities.push_back(e);
       state.player = e;
     }
@@ -65,7 +64,7 @@ public:
     }
   }
 
-  void spawnAlien(vec2 const& pos) {
+  void spawnAlien(vec2 const& pos, bool targetPlayer = false) {
     auto& state = GameState::instance();
     auto e = state.scene.spawn();
     e->add(state.transComp);
@@ -77,25 +76,113 @@ public:
     auto& actor = e->add(state.actorComp);
     actor.faction = 1;
     actor.pos = pos;
+    actor.targetPlayer = targetPlayer;
     mEntities.push_back(e);
   }
 
-  void spawnConsole(vec2 const& pos) {
+  void spawnConsole(vec2 const& pos, std::string const& msg, bool complete = false) {
     auto& state = GameState::instance();
     auto e = state.scene.spawn();
-    auto& trans = e->add(state.transComp);
-    trans.position = vec3{pos(0), 0.0f, pos(1)};
+    e->add(state.transComp);
     auto& shape = e->add(state.shapeComp);
     shape.drawable = mConsoleDrawable.get();
     shape.color = vec4{0.2f, 0.2f, 0.2f, 1.0f};
+    auto& task = e->add(state.taskComp);
+    task.complete = complete;
+    task.pos = pos;
+    auto& instr = e->add(state.instrComp);
+    instr.msg = msg;
+    auto& behavior = e->add(state.behaviorComp);
+    behavior.onUpdateHandler = &mTaskBehavior;
     mEntities.push_back(e);
   }
 
-  void initLevel(int level) {
-    mLevelComplete = false;
-    mGameOver = false;
-    overlay_set_text("");
+  void spawnPlant(vec2 const& pos, std::string const& msg, bool complete = false) {
     auto& state = GameState::instance();
+    auto e = state.scene.spawn();
+    auto& trans = e->add(state.transComp);
+    trans.position = vec3{10,0,0};
+    auto& shape = e->add(state.shapeComp);
+    shape.drawable = mPlantDrawable.get();
+    shape.color = vec4{0.2f, 0.2f, 0.2f, 1.0f};
+    auto& task = e->add(state.taskComp);
+    task.complete = complete;
+    task.pos = pos;
+    task.plant = true;
+    auto& instr = e->add(state.instrComp);
+    instr.msg = msg;
+    auto& behavior = e->add(state.behaviorComp);
+    behavior.onUpdateHandler = &mTaskBehavior;
+    mEntities.push_back(e);
+  }
+
+  void spawnCrew(vec2 const& pos, std::string const& name, int health, bool complete = false) {
+    auto& state = GameState::instance();
+    auto e = state.scene.spawn();
+    e->add(state.transComp);
+    auto& shape = e->add(state.shapeComp);
+    shape.drawable = mCrewDrawable.get();
+    shape.color = vec4{0.2f, 0.8f, 0.2f, 1.0f};
+    shape.trans = mth::rotation(mth::from_axis(vec3{1,0,0}, -0.4f));
+    auto& task = e->add(state.taskComp);
+    task.complete = complete;
+    task.pos = pos;
+    auto& instr = e->add(state.instrComp);
+    instr.msg = "Check Vitals: " + name;
+    auto& behavior = e->add(state.behaviorComp);
+    behavior.onUpdateHandler = &mTaskBehavior;
+    auto& crew = e->add(state.crewComp);
+    crew.name = name;
+    crew.health = health;
+    mEntities.push_back(e);
+  }
+
+  void story(int year, std::string body, bool gameOver = false) {
+    commonInit(vec2{-10,0});
+    mStory = "<h1>It's the Year " + std::to_string(year) + "</h1>";
+    mStory += "<p>Crew: ";
+    for (auto& crew : mCrew) {
+      auto& name = crew.first;
+      auto health = crew.second.second;
+      if (health > 0) {
+        mStory += name + " ";
+      } else {
+        mStory += "<strike>" + name + "</strike> ";
+      }
+    }
+    mStory += "</p>";
+    mStory += body;
+    if (!gameOver) {
+      mStory += "<p>Click to Continue</p>";
+    } else {
+      mStory += "<p>Click to Restart</p>";
+    }
+    mStoryBoard = true;
+  }
+
+  void initLevel(int level) {
+    printf("initLevel %d\n", level);
+    fflush(stdout);
+
+    auto& state = GameState::instance();
+    if (level == 0) {
+      mCrew.clear();
+      mCrew.insert(std::make_pair("Peter", std::make_pair('A', 100)));
+      mCrew.insert(std::make_pair("Lucy", std::make_pair('B', 100)));
+      mCrew.insert(std::make_pair("Frank", std::make_pair('C', 100)));
+      mCrew.insert(std::make_pair("Mary", std::make_pair('D', 100)));
+    } else {
+      // persisten crew health
+      for (auto t : state.scene.with(state.crewComp)) {
+        auto& crew = t->get(state.crewComp);
+        mCrew[crew.name].second = crew.health;
+      }
+    }
+
+    mGameOver = false;
+    mStoryBoard = false;
+    mShowingInstructions = false;
+    game_set_text(0, "");
     state.reset();
     { // map
       mMapDrawable = mRenderer.createDrawable(mMap.mesh());
@@ -113,81 +200,197 @@ public:
       auto& shape = e->add(state.shapeComp);
       shape.drawable = mChargerDrawable.get();
       auto& trigger = e->add(state.triggerComp);
-      trigger.pos = mMap.pointOfInterest('C');
+      trigger.pos = mMap.pointOfInterest('H');
       auto& behavior = e->add(state.behaviorComp);
       behavior.onUpdateHandler = &mTriggerBehavior;
     }
 
+    std::set<int> tasks;
     switch (level) {
     case 0: {
+      commonInit(vec2{-10,0});
+      mStory = "<h1>Deep Space Janitor</h1><p>You are the maintenance robot on a deep space mission.<br>A game for Ludum Dare 48.</p><p>Use W,A,S,D and your mouse to move around. Left mouse button to shoot.</p><p>Click to Start</p>";
+      mStoryBoard = true;
+    } break;
+    case 1: {
+      story(2048, "<p>All systems Go! Report at your charging station so we can start our journey into deep space.<br>Take good care of the sleeping crew!</p>");
+    } break;
+    case 2: {
       // Nothing to do.
       // Player navigates to charging station
       commonInit(mMap.pointOfInterest('0'));
-      spawnConsole(mMap.pointOfInterest('a'));
-      spawnConsole(mMap.pointOfInterest('b'));
+
+      // testing
+      //spawnAlien(mMap.pointOfInterest('1'));
+      //spawnAlien(mMap.pointOfInterest('5'));
+      //spawnAlien(mMap.pointOfInterest('6'));
     } break;
-    case 1: {
+    case 3: {
+      story(2122, "<p>Time for some chores!</p>");
+    } break;
+    case 4: {
+      // Player does tasks
+      // Player navigates to charging station
+      commonInit(mMap.pointOfInterest('H'));
+      tasks.insert(0);
+      tasks.insert(1);
+      tasks.insert(2);
+    } break;
+    case 5: {
+      game_play_sound("danger");
+      story(2136, "<h2>Intruders!</h2><p>Quickly find and defeat the alien robots!</p>");
+    } break;
+    case 6: {
       // Invaders! Kill alien.
       // Player navigates to charging station
-      commonInit(mMap.pointOfInterest('C'));
+      commonInit(mMap.pointOfInterest('H'));
       spawnAlien(mMap.pointOfInterest('1'));
       spawnAlien(mMap.pointOfInterest('5'));
       spawnAlien(mMap.pointOfInterest('6'));
     } break;
+    case 7: {
+      //game_play_sound("danger");
+      story(3205, "<p>Time to water the plants!</p>");
+    } break;
+    case 8: {
+      // Player does tasks
+      // Player navigates to charging station
+      commonInit(mMap.pointOfInterest('H'));
+      tasks.insert(3);
+      tasks.insert(4);
+      tasks.insert(5);
+    } break;
+    case 9: {
+      game_play_sound("danger");
+      story(4054, "<h2>Intruders!</h2><p>Quickly find and defeat the alien robots!</p>");
+    } break;
+    case 10: {
+      // Invaders! Kill alien.
+      // Player navigates to charging station
+      commonInit(mMap.pointOfInterest('H'));
+      spawnAlien(mMap.pointOfInterest('1'));
+      spawnAlien(mMap.pointOfInterest('5'));
+      spawnAlien(mMap.pointOfInterest('6'));
+      spawnAlien(mMap.pointOfInterest('0'), true);
+      spawnAlien(mMap.pointOfInterest('3'), true);
+      spawnAlien(mMap.pointOfInterest('8'), true);
+    } break;
     default: {
       // Nothing to do.
       // Player navigates to charging station
-      commonInit(vec2{1,1});
+      story(5267, "<p>You made it into deep space. Your journey has come to an end.<br>You find: Nothing<br>(Seriously, what did you expect?)</p><p>Thanks for playing :-)</p>", true);
       mGameOver = true;
-      overlay_set_text("<h1>You did it!</h1><h2>Click to Restart</h2>");
+      game_play_sound("win");
     }
     }
+    // tasks
+    spawnConsole(mMap.pointOfInterest('a'), "Calibrate Flux Capacitor", !tasks.contains(0));
+    spawnConsole(mMap.pointOfInterest('b'), "Flush Iridium Coil", !tasks.contains(1));
+    spawnConsole(mMap.pointOfInterest('c'), "Rewire Power Mesh", !tasks.contains(2));
+    spawnPlant(mMap.pointOfInterest('d'), "Water Plant", !tasks.contains(3));
+    spawnPlant(mMap.pointOfInterest('e'), "Water Plant", !tasks.contains(4));
+    spawnPlant(mMap.pointOfInterest('f'), "Water Plant", !tasks.contains(5));
+
+    int i = 0;
+    for (auto& crew : mCrew) {
+      spawnCrew(mMap.pointOfInterest(crew.second.first), crew.first, crew.second.second, !tasks.contains(100 + (i++)));
+    }
+    
+    if (mStoryBoard || mGameOver) {
+      game_set_text(0, mStory.c_str());
+    }
+    //transitionFade = 1.0f;
   }
 
-  bool checkObjectives() {
+  void checkObjectives() {
     auto& state = GameState::instance();
     auto& playerActor = state.player->get(state.actorComp);
     if (playerActor.health <= 0) {
       if (!mGameOver) {
-        overlay_set_text("<h1>The Ship is Lost!</h1><h2>Click to Restart</h2>");
+        mStory = "<h1>You did not make it!</h1><p>The ship is lost.</p><p>Click to Restart</p>";
+        game_set_text(0, mStory.c_str());
       }
       mGameOver = true;
-      return false;
+      state.objectivesDone = false;
+      mRestartCooldown = 2.0f;
+      return;
+    }
+
+    bool crewDead = true;
+    for (auto t : state.scene.with(state.crewComp)) {
+      auto& crew = t->get(state.crewComp);
+      if (crew.health > 0) {
+        crewDead = false;
+        break;
+      }
+    }
+    if (crewDead) {
+      if (!mGameOver) {
+        mStory = "<h1>The crew is dead!</h1><p>Your mission failed.</p><p>Click to Restart</p>";
+        game_set_text(0, mStory.c_str());
+      }
+      mRestartCooldown = 2.0f;
+      mGameOver = true;
+      state.objectivesDone = false;
+      return;
     }
     
+    std::string todoList = "To Do:<ul>";
     bool tasksDone = true;
     // Are all aliens dead?
     for (auto e : state.scene.with(state.actorComp)) {
       auto& actor = e->get(state.actorComp);
       if (actor.faction != 0 && actor.health > 0) {
         tasksDone = false;
+        mRenderer.drawMarker(vec3{playerActor.pos(0), 0, playerActor.pos(1)},
+                             vec3{actor.pos(0), 0, actor.pos(1)});
       }
     }
+    if (!tasksDone) {
+      todoList += "<li>Defeat Intruders!</li>";
+    }
+
+    if (tasksDone) { // only check if no aliens alive
+      // Any maintenance tasks?
+      for (auto e : state.scene.with(state.taskComp)) {
+        auto& task = e->get(state.taskComp);
+        if (!task.complete) {
+          auto& instr = e->get(state.instrComp);
+          tasksDone = false;
+          mRenderer.drawMarker(vec3{playerActor.pos(0), 0, playerActor.pos(1)},
+                               vec3{task.pos(0), 0, task.pos(1)});
+          todoList += "<li>" + instr.msg + "</li>";
+        }
+      }
+    }
+
+    if (tasksDone) {
+      auto chargerPos = mMap.pointOfInterest('H');
+      mRenderer.drawMarker(vec3{playerActor.pos(0), 0, playerActor.pos(1)},
+                           vec3{chargerPos(0), 0, chargerPos(1)});
+      todoList += "<li>Go to Charging Station</li>";
+    }
+
+    todoList += "</ul>";
+    game_set_text(1, todoList.c_str());
     
-    return tasksDone && state.playerOnCharger;
+    state.objectivesDone = tasksDone;
   }
   
   Game(gl::context ctx)
-    : mMap(24, 24, "\
-########   ab   ########\
-########  0     ########\
-###    #        #    ###\
-### 9  # ###### #    ###\
-###      #    #    7 ###\
+    : mMap(24, 17, "\
+########   a    ########\
+########  0    d########\
+###   e#    b   #    ###\
+###B   # ###### #   C###\
+###A 9   #  c #  7  D###\
 ###    # # 8  # #    ###\
 ######## #    # ########\
 ######## #### # ########\
 #                      #\
 ## ### ########## ### ##\
-#   ##  ########  ##6  #\
-#C  ##  ########  ##   #\
-###### ########## ######\
-######  ########  ######\
-######  ########  ######\
-###### ########## ######\
-######  ########  ######\
-######  ########  ######\
-######  ########  ######\
+#   ## f########  ##6  #\
+#H  ##  ########  ##   #\
 ###### ########## ######\
 #             4        #\
 #      2          5    #\
@@ -197,26 +400,36 @@ public:
     , mPlayerBehavior(&mMap)
     , mAlienBehavior(&mMap)
     , mProjectileBehavior(&mMap)
+    , mTaskBehavior(&mMap)
     , mRenderer(ctx)
     , mActorDrawable(mRenderer.createDrawable(actorMesh()))
     , mProjectileDrawable(mRenderer.createDrawable(geometry::generate_sphere(0.05f, 5, vec4{1,1,1,1})))
-    , mConsoleDrawable(mRenderer.createDrawable((consoleMesh()))) {
+    , mConsoleDrawable(mRenderer.createDrawable((consoleMesh())))
+    , mCrewDrawable(mRenderer.createDrawable(geometry::generate_cylinder(0.3f, 0.8f, 8, vec4{1,1,1,1})))
+    , mPlantDrawable(mRenderer.createDrawable(plantMesh())) {
     printf("C Game\n");
     fflush(stdout);
     initLevel(mLevel);
-    overlay_set_text("<h1>Click to Start</h1>");
   }
   ~Game() {
     printf("D Game\n");
     fflush(stdout);
   }
   void onLostFocus() {
-    overlay_set_text("<h1>Paused</h1><h2>Click to Continue</h2>");
+    mPaused = true;
+    game_set_text(0, "<h1>Paused</h1><h2>Click to Continue</h2>");
   }
   void onGainedFocus() {
-    overlay_set_text("");
+    mPaused = false;
+    if (mStoryBoard || mGameOver) {
+      game_set_text(0, mStory.c_str());
+    } else {
+      game_set_text(0, "");
+    }
   }
   int render(float dt, unsigned int width, unsigned int height, bool focus) {
+    bool wasPaused = mPaused;
+    auto& state = GameState::instance();
     if (focus && !mFocus) {
       onGainedFocus();
     }
@@ -225,36 +438,61 @@ public:
     }
     mFocus = focus;
 
-    if (mGameOver && mMouse.mousedownMain() > 0) {
-      mLevel = 0;
-      initLevel(mLevel);
-    }
-    if (mLevelComplete && mMouse.mousedownMain() > 0) {
-      initLevel(++mLevel);
+    if (!wasPaused) {
+      if (mGameOver && mMouse.mousedownMain() > 0 && mRestartCooldown < 0.0f) {
+        game_play_sound("continue");
+        mLevel = 0;
+        initLevel(mLevel);
+      }
+      if (state.levelComplete || (mStoryBoard && mMouse.mousedownMain() > 0)) {
+        game_play_sound("continue");
+        initLevel(++mLevel);
+      }
     }
     
-    if (mFocus && !mGameOver) {
-      auto& state = GameState::instance();
+    if (mFocus && !mGameOver && !mStoryBoard) {
       for (auto e : state.scene.with(state.behaviorComp)) {
         auto& behavior = e->get(state.behaviorComp);
         if (behavior.onUpdateHandler != nullptr) {
           behavior.onUpdateHandler->onUpdate(e, dt);
         }
       }
-      if (checkObjectives()) {
-        // Level complete
-        if (!mLevelComplete) {
-          overlay_set_text("<h1>Good Work!</h1><h2>Click to go to Standby</h2>");
+      
+      {
+        std::string msg;
+        bool show = false;
+        for (auto e : state.scene.with(state.instrComp)) {
+          auto& instr = e->get(state.instrComp);
+          if (instr.show) {
+            show = true;
+            if (instr.pressE) {
+              msg = "Press E to " + instr.msg;
+            } else {
+              msg = instr.msg;
+            }
+          }
         }
-        mLevelComplete = true;
-      } else {
-        if (mLevelComplete) {
-          overlay_set_text("");
+        if (show && !mShowingInstructions) {
+          mShowingInstructions = true;
+          game_set_text(0, msg.c_str());
         }
-        mLevelComplete = false;
+        if (!show && mShowingInstructions) {
+          mShowingInstructions = false;
+          game_set_text(0, "");
+        }
       }
+      checkObjectives();
+    } else {
+      game_set_text(1, "");
     }
     mRenderer.render(width, height);
+
+    if (mRestartCooldown > 0.0f) {
+      mRestartCooldown -= dt;
+    } else {
+      mRestartCooldown = -1.0f;
+    }
+    
     return 0;
   }
 private:
@@ -263,6 +501,7 @@ private:
   AlienBehavior mAlienBehavior;
   ProjectileBehavior mProjectileBehavior;
   TriggerBehavior mTriggerBehavior;
+  TaskBehavior mTaskBehavior;
   PlayerCameraBehavior mPlayerCameraBehavior;
   Renderer mRenderer;
   std::unique_ptr<Drawable> mActorDrawable;
@@ -270,12 +509,19 @@ private:
   std::unique_ptr<Drawable> mMapDrawable;
   std::unique_ptr<Drawable> mChargerDrawable;
   std::unique_ptr<Drawable> mConsoleDrawable;
+  std::unique_ptr<Drawable> mCrewDrawable;
+  std::unique_ptr<Drawable> mPlantDrawable;
   std::vector<Entity*> mEntities;
   int mLevel = 0;
   bool mFocus = false;
   bool mGameOver = false;
-  bool mLevelComplete = false;
+  bool mStoryBoard = false;
   input::mouse_observer mMouse;
+  bool mShowingInstructions = false;
+  bool mPaused = false;
+  std::map<std::string, std::pair<char, int>> mCrew;
+  std::string mStory;
+  float mRestartCooldown = -1.0f;
 };
 
 WASM_EXPORT("init")

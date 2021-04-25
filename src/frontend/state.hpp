@@ -3,6 +3,13 @@
 
 #include <common/mth.hpp>
 #include <common/ecs.hpp>
+#include <string>
+#include "wasm.h"
+
+WASM_IMPORT("game", "set_text")
+int game_set_text(int id, char const* text);
+WASM_IMPORT("game", "play_sound")
+int game_play_sound(char const* name);
 
 using vec2 = mth::vector<float,2>;
 using vec3 = mth::vector<float,3>;
@@ -29,6 +36,7 @@ struct Shape {
   float flash = 0.0f;
   Drawable const* drawable = nullptr;
   bool visible = true;
+  mat4 trans = mth::identity<float,4,4>();
 };
 
 struct Physical {
@@ -71,6 +79,7 @@ struct Actor {
   float hitAnim = 0.0f;
   float deathAnim = 1.0f;
   float cooldown = 0.0f;
+  bool targetPlayer = false;
 };
 
 struct Projectile {
@@ -85,6 +94,26 @@ struct Trigger {
   vec2 pos = vec2{0,0};
 };
 
+struct Task {
+  int id = 0;
+  bool complete = false;
+  vec2 pos = vec2{0,0};
+  bool plant = false;
+};
+
+struct Instructions {
+  bool show = false;
+  bool pressE = true;
+  std::string msg;
+};
+
+struct Crew {
+  int health = 100;
+  float hitAnim = 0.0f;
+  float deathAnim = 1.0f;
+  std::string name;
+};
+
 } // namespace Comp
 
 using CameraComponent = ecs::component<Comp::Camera>;
@@ -95,6 +124,9 @@ using BehaviorComponent = ecs::component<Comp::Behavior>;
 using ActorComponent = ecs::component<Comp::Actor>;
 using ProjectileComponent = ecs::component<Comp::Projectile>;
 using TriggerComponent = ecs::component<Comp::Trigger>;
+using TaskComponent = ecs::component<Comp::Task>;
+using InstructionsComponent = ecs::component<Comp::Instructions>;
+using CrewComponent = ecs::component<Comp::Crew>;
 
 struct GameState {
   ecs::scene scene;
@@ -106,11 +138,15 @@ struct GameState {
   ActorComponent* actorComp;
   ProjectileComponent* projectileComp;
   TriggerComponent* triggerComp;
+  TaskComponent* taskComp;
+  InstructionsComponent* instrComp;
+  CrewComponent* crewComp;
   Entity* player = nullptr;
   Entity* camera = nullptr;
   std::vector<Entity*> projectiles;
   std::size_t nextProjectile = 0;
-  bool playerOnCharger = false;
+  bool levelComplete = false;
+  bool objectivesDone = false;
 
   static GameState& instance() {
     static GameState i;
@@ -122,7 +158,8 @@ struct GameState {
     camera = nullptr;
     projectiles.clear();
     nextProjectile = 0;
-    playerOnCharger = false;
+    levelComplete = false;
+    objectivesDone = false;
     scene = ecs::scene();
     cameraComp = scene.create_component<Comp::Camera>();
     shapeComp = scene.create_component<Comp::Shape>();
@@ -132,6 +169,9 @@ struct GameState {
     actorComp = scene.create_component<Comp::Actor>();
     projectileComp = scene.create_component<Comp::Projectile>();
     triggerComp = scene.create_component<Comp::Trigger>();
+    taskComp = scene.create_component<Comp::Task>();
+    instrComp = scene.create_component<Comp::Instructions>();
+    crewComp = scene.create_component<Comp::Crew>();
   }
   
 private:

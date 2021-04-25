@@ -14,7 +14,8 @@ public:
   };
   
   Map(int width, int height, std::string const& layout)
-    : mWidth(width), mHeight(height) {
+    : mWidth(width), mHeight(height)
+    , mPathing(mWidth * mHeight) {
     assert(mWidth * mHeight == layout.size());
     mTiles.resize(mWidth * mHeight);
     mInvalid.type = Tile::Wall;
@@ -27,7 +28,7 @@ public:
         } else {
           tile.type = Tile::Walkable;
           if (c != ' ') {
-            mPointOfInterest.insert(std::make_pair(c, vec2{(float)x + 0.5f, (float)y + 0.5f}));
+            mPointOfInterest.insert(std::make_pair(c, centerOf(x,y)));
           }
         }
       }
@@ -51,6 +52,69 @@ public:
     int x = pos(0) >= 0.0f ? (int)pos(0) : (int)pos(0) - 1;
     int y = pos(1) >= 0.0f ? (int)pos(1) : (int)pos(1) - 1;
     return at(x, y);
+  }
+  int& costAt(int x, int y) {
+    return mPathing[y * mWidth + x];
+  }
+
+  vec2 centerOf(int x, int y) const {
+    return vec2{(float)x + 0.5f, (float)y + 0.5f};
+  }
+
+  vec2 nextWall(vec2 const& pos) const {
+    int x = pos(0) >= 0.0f ? (int)pos(0) : (int)pos(0) - 1;
+    int y = pos(1) >= 0.0f ? (int)pos(1) : (int)pos(1) - 1;
+    if (at(x+1,y).type == Tile::Wall) return centerOf(x+1,y);
+    if (at(x-1,y).type == Tile::Wall) return centerOf(x-1,y);
+    if (at(x,y+1).type == Tile::Wall) return centerOf(x,y+1);
+    if (at(x,y-1).type == Tile::Wall) return centerOf(x,y-1);
+    return centerOf(x+1,y); // just pick one
+  }
+
+  void calcCost(int fx, int fy, int tx, int ty, int cost = 0) {
+    if (at(tx, ty).type == Tile::Wall) return;
+    auto& tc = costAt(tx, ty);
+    if (tc <= cost) return;
+    tc = cost;
+    if (fx == tx && fy == ty) return;
+    calcCost(fx, fy, tx + 1, ty, cost+1);
+    calcCost(fx, fy, tx - 1, ty, cost+1);
+    calcCost(fx, fy, tx, ty + 1, cost+1);
+    calcCost(fx, fy, tx, ty - 1, cost+1);
+  }
+  vec2 nextWaypoint(vec2 const& from, vec2 const& to) {
+    int fx = from(0) >= 0.0f ? (int)from(0) : (int)from(0) - 1;
+    int fy = from(1) >= 0.0f ? (int)from(1) : (int)from(1) - 1;
+    int tx = to(0) >= 0.0f ? (int)to(0) : (int)to(0) - 1;
+    int ty = to(1) >= 0.0f ? (int)to(1) : (int)to(1) - 1;
+    if (fx == tx && fy == ty) return to;
+    
+    for (auto& i : mPathing) {
+      i = 10000000;
+    }
+    calcCost(fx, fy, tx, ty);
+    int dir = 0;
+    int min = 10000000;
+    if (costAt(fx+1, fy) < min) {
+      dir = 0;
+      min = costAt(fx+1, fy);
+    }
+    if (costAt(fx-1, fy) < min) {
+      dir = 1;
+      min = costAt(fx-1, fy);
+    }
+    if (costAt(fx, fy+1) < min) {
+      dir = 2;
+      min = costAt(fx, fy+1);
+    }
+    if (costAt(fx, fy-1) < min) {
+      dir = 3;
+      min = costAt(fx, fy-1);
+    }
+    if (dir == 0) return centerOf(fx+1, fy);
+    if (dir == 1) return centerOf(fx-1, fy);
+    if (dir == 2) return centerOf(fx, fy+1);
+    return centerOf(fx, fy-1);
   }
 
   bool tryMove(vec2 const& curr, vec2& move, float r) const {
@@ -86,7 +150,7 @@ public:
           vec3 p0, p1;
           gjk::closest(simplex, p0, p1);
           if (mth::length(p1 - p0) > r) {
-            dbg::gizmos::instance().drawLine(p0, p1, vec4{0, 1, 0, 1});
+            //dbg::gizmos::instance().drawLine(p0, p1, vec4{0, 1, 0, 1});
           } else {
             auto normal = mth::normal(p1 - p0);
             auto normal2 = vec2{normal(0), normal(2)};
@@ -94,7 +158,7 @@ public:
             if (dot > 0) {
               move = move - dot * normal2;
             }
-            dbg::gizmos::instance().drawLine(p0, p1, vec4{1, 0, 0, 1});
+            //dbg::gizmos::instance().drawLine(p0, p1, vec4{1, 0, 0, 1});
             collision = true;
           }
         }
@@ -221,6 +285,7 @@ private:
   Tile mInvalid;
   std::vector<Tile> mTiles;
   std::map<char, vec2> mPointOfInterest;
+  std::vector<int> mPathing;
 };
 
 #endif // FRONTEND_MAP_HPP

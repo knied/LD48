@@ -45,11 +45,11 @@ public:
           if (dot > 0) {
             move = move - dot * normal;
           }
-          dbg::gizmos::instance().drawLine(p0, p1, vec4{1, 0, 0, 1});
+          //dbg::gizmos::instance().drawLine(p0, p1, vec4{1, 0, 0, 1});
         } else {
           auto p0 = vec3{otherActor.pos(0), 0.5f, otherActor.pos(1)};
           auto p1 = vec3{npos(0), 0.5f, npos(1)};
-          dbg::gizmos::instance().drawLine(p0, p1, vec4{0, 1, 0, 1});
+          //dbg::gizmos::instance().drawLine(p0, p1, vec4{0, 1, 0, 1});
         }
       }
       mMap->tryMove(actor.pos, move, radius);
@@ -70,6 +70,7 @@ public:
     projectile.move = 6.0f * actor.lookDir;
     projectile.damage = 20;
     projectile.faction = actor.faction;
+    game_play_sound("fire");
   }
 
   void melee(Entity* self) {
@@ -77,7 +78,7 @@ public:
     auto& state = GameState::instance();
     auto& actor = self->get(state.actorComp);
     if (actor.cooldown > 0.01f) return;
-    actor.cooldown = 0.25f;
+    actor.cooldown = 0.5f;
     for (auto other : state.scene.with(state.actorComp)) {
       if (other == self) continue;
       auto& otherActor = other->get(state.actorComp);
@@ -86,10 +87,31 @@ public:
       if (mth::length(otherActor.pos - actor.pos) < 3.0f * radius) {
         otherActor.health -= 10;
         otherActor.hitAnim = 1.0f;
+        if (otherActor.health <= 0) {
+          game_play_sound("crew_dead");
+        } else {
+          game_play_sound("hit");
+        }
+      }
+    }
+
+    for (auto other : state.scene.with(state.crewComp)) {
+      auto& crew = other->get(state.crewComp);
+      auto& task = other->get(state.taskComp);
+      if (crew.health <= 0) continue;
+      if (mth::length(task.pos - actor.pos) < 3.0f * radius) {
+        crew.health -= 10;
+        crew.hitAnim = 1.0f;
+        if (crew.health <= 0) {
+          task.complete = false;
+          game_play_sound("crew_dead");
+        } else {
+          game_play_sound("hit");
+        }
       }
     }
   }
-private:
+protected:
   Map* mMap;
 };
 

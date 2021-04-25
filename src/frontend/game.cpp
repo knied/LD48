@@ -139,7 +139,11 @@ public:
 
   void story(int year, std::string body, bool gameOver = false) {
     commonInit(vec2{-10,0});
-    mStory = "<h1>You wake up in the year " + std::to_string(year) + "</h1>";
+    if (year == 2048) {
+      mStory = "<h1>It's the year " + std::to_string(year) + "</h1>";
+    } else {
+      mStory = "<h1>You wake up in the year " + std::to_string(year) + "</h1>";
+    }
     mStory += "<p>Crew: ";
     for (auto& crew : mCrew) {
       auto& name = crew.first;

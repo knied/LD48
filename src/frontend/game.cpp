@@ -139,7 +139,7 @@ public:
 
   void story(int year, std::string body, bool gameOver = false) {
     commonInit(vec2{-10,0});
-    mStory = "<h1>It's the Year " + std::to_string(year) + "</h1>";
+    mStory = "<h1>You wake up in the year " + std::to_string(year) + "</h1>";
     mStory += "<p>Crew: ";
     for (auto& crew : mCrew) {
       auto& name = crew.first;
@@ -226,7 +226,7 @@ public:
       //spawnAlien(mMap.pointOfInterest('6'));
     } break;
     case 3: {
-      story(2122, "<p>Time for some chores!</p>");
+      story(2122, "<p>Time for some chores.</p>");
     } break;
     case 4: {
       // Player does tasks
@@ -238,7 +238,7 @@ public:
     } break;
     case 5: {
       game_play_sound("danger");
-      story(2136, "<h2>Intruders!</h2><p>Quickly find and defeat the alien robots!</p>");
+      story(2136, "<h2>Intruders!</h2><p>Quickly find and defeat the alien robots!<br>Protect the crew!</p>");
     } break;
     case 6: {
       // Invaders! Kill alien.
@@ -250,7 +250,7 @@ public:
     } break;
     case 7: {
       //game_play_sound("danger");
-      story(3205, "<p>Time to water the plants!</p>");
+      story(3205, "<p>Time to water the plants.</p>");
     } break;
     case 8: {
       // Player does tasks
@@ -262,7 +262,7 @@ public:
     } break;
     case 9: {
       game_play_sound("danger");
-      story(4054, "<h2>Intruders!</h2><p>Quickly find and defeat the alien robots!</p>");
+      story(4054, "<h2>Intruders!</h2><p>Quickly find and defeat the alien robots!<br>Protect the crew!</p>");
     } break;
     case 10: {
       // Invaders! Kill alien.
@@ -287,9 +287,9 @@ public:
     spawnConsole(mMap.pointOfInterest('a'), "Calibrate Flux Capacitor", !tasks.contains(0));
     spawnConsole(mMap.pointOfInterest('b'), "Flush Iridium Coil", !tasks.contains(1));
     spawnConsole(mMap.pointOfInterest('c'), "Rewire Power Mesh", !tasks.contains(2));
-    spawnPlant(mMap.pointOfInterest('d'), "Water Plant", !tasks.contains(3));
-    spawnPlant(mMap.pointOfInterest('e'), "Water Plant", !tasks.contains(4));
-    spawnPlant(mMap.pointOfInterest('f'), "Water Plant", !tasks.contains(5));
+    spawnPlant(mMap.pointOfInterest('d'), "Water Coffee Tree", !tasks.contains(3));
+    spawnPlant(mMap.pointOfInterest('e'), "Water Hibiscus", !tasks.contains(4));
+    spawnPlant(mMap.pointOfInterest('f'), "Water Tomato Plant", !tasks.contains(5));
 
     int i = 0;
     for (auto& crew : mCrew) {

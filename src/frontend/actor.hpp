@@ -16,7 +16,9 @@ public:
     // color & animations
     vec4 color = actor.faction == 0 ?
       vec4{0.2f, 0.2f, 0.8f, 1.0f} : vec4{0.8f, 0.2f, 0.2f, 1.0f};
-    shape.color = actor.hitAnim * vec4{1,1,1,1} + (1.0f - actor.hitAnim) * color;
+    //shape.color = actor.hitAnim * vec4{1,1,1,1} + (1.0f - actor.hitAnim) * color;
+    shape.color = color;
+    shape.flash = actor.hitAnim;
     actor.hitAnim *= (1.0f - 2.0f * dt);
     if (actor.health <= 0) {
       actor.deathAnim *= (1.0f - 2.0f * dt);
@@ -100,38 +102,44 @@ actorMesh() {
   float const b = 0.8f;
   vec4 color{1,1,1,1};
 
-  out.vd.push_back({ vec3{0,0,0}, color }); // 0
-  out.vd.push_back({ vec3{-a,b,0}, color }); // 1
-  out.vd.push_back({ vec3{0,a+b,0}, color }); // 2
-  out.vd.push_back({ vec3{a,b,0}, color }); // 3
-  out.vd.push_back({ vec3{0,b,-a}, color }); // 4
-  out.vd.push_back({ vec3{0,b,a}, color }); // 5
+  vec3 norm{0,0,0};
+  out.vd.push_back({ vec3{0,0,0}, norm, color }); // 0
+  out.vd.push_back({ vec3{-a,b,0}, norm, color }); // 1
+  out.vd.push_back({ vec3{0,a+b,0}, norm, color }); // 2
+  out.vd.push_back({ vec3{a,b,0}, norm, color }); // 3
+  out.vd.push_back({ vec3{0,b,-a}, norm, color }); // 4
+  out.vd.push_back({ vec3{0,b,a}, norm, color }); // 5
 
-  out.id.push_back(0);
-  out.id.push_back(1);
-  out.id.push_back(4);
-  out.id.push_back(1);
-  out.id.push_back(2);
-  out.id.push_back(4);
-  out.id.push_back(2);
-  out.id.push_back(3);
-  out.id.push_back(4);
-  out.id.push_back(3);
-  out.id.push_back(0);
-  out.id.push_back(4);
+  out.vd.push_back({ vec3{0,0,0}, norm, color }); // 0
+  out.vd.push_back({ vec3{0,b,a}, norm, color }); // 5
+  out.vd.push_back({ vec3{-a,b,0}, norm, color }); // 1
+  out.vd.push_back({ vec3{-a,b,0}, norm, color }); // 1
+  out.vd.push_back({ vec3{0,b,a}, norm, color }); // 5
+  out.vd.push_back({ vec3{0,a+b,0}, norm, color }); // 2
+  out.vd.push_back({ vec3{0,a+b,0}, norm, color }); // 2
+  out.vd.push_back({ vec3{0,b,a}, norm, color }); // 5
+  out.vd.push_back({ vec3{a,b,0}, norm, color }); // 3
+  out.vd.push_back({ vec3{a,b,0}, norm, color }); // 3
+  out.vd.push_back({ vec3{0,b,a}, norm, color }); // 5
+  out.vd.push_back({ vec3{0,0,0}, norm, color }); // 0
+  
+  out.vd.push_back({ vec3{0,0,0}, norm, color }); // 0
+  out.vd.push_back({ vec3{-a,b,0}, norm, color }); // 1
+  out.vd.push_back({ vec3{0,b,-a}, norm, color }); // 4
+  out.vd.push_back({ vec3{-a,b,0}, norm, color }); // 1
+  out.vd.push_back({ vec3{0,a+b,0}, norm, color }); // 2
+  out.vd.push_back({ vec3{0,b,-a}, norm, color }); // 4
+  out.vd.push_back({ vec3{0,a+b,0}, norm, color }); // 2
+  out.vd.push_back({ vec3{a,b,0}, norm, color }); // 3
+  out.vd.push_back({ vec3{0,b,-a}, norm, color }); // 4
+  out.vd.push_back({ vec3{a,b,0}, norm, color }); // 3
+  out.vd.push_back({ vec3{0,0,0}, norm, color }); // 0
+  out.vd.push_back({ vec3{0,b,-a}, norm, color }); // 4
 
-  out.id.push_back(0);
-  out.id.push_back(5);
-  out.id.push_back(1);
-  out.id.push_back(1);
-  out.id.push_back(5);
-  out.id.push_back(2);
-  out.id.push_back(2);
-  out.id.push_back(5);
-  out.id.push_back(3);
-  out.id.push_back(3);
-  out.id.push_back(5);
-  out.id.push_back(0);
+  for (std::size_t i = 0; i < out.vd.size(); ++i) {
+    out.id.push_back(i);
+  }
+  out.calculateNormals();
 
   return out;
 }

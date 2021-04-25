@@ -15,8 +15,9 @@ private:
 public:
   void drawLine(vec3 const& p0, vec3 const&  p1,
                 vec4 const& color) {
-    mMesh.vd.push_back({ p0, color});
-    mMesh.vd.push_back({ p1, color});
+    vec3 norm{0,0,0};
+    mMesh.vd.push_back({ p0, norm, color});
+    mMesh.vd.push_back({ p1, norm, color});
     mMesh.id.push_back((unsigned int)mMesh.id.size());
     mMesh.id.push_back((unsigned int)mMesh.id.size());
   }

@@ -7,6 +7,7 @@
 using vec2 = mth::vector<float,2>;
 using vec3 = mth::vector<float,3>;
 using vec4 = mth::vector<float,4>;
+using mat3 = mth::matrix<float,3,3>;
 using mat4 = mth::matrix<float,4,4>;
 using rot3 = mth::quaternion<float>;
 
@@ -25,6 +26,7 @@ struct Camera {
 
 struct Shape {
   vec4 color = vec4{1,1,1,1};
+  float flash = 0.0f;
   Drawable const* drawable = nullptr;
   bool visible = true;
 };

@@ -4,6 +4,7 @@
 #include "geometry.hpp"
 #include <common/gjk.hpp>
 #include "debug.hpp"
+#include <map>
 
 class Map final {
 public:
@@ -12,17 +13,22 @@ public:
     Type type;
   };
   
-  Map(int width, int height)
+  Map(int width, int height, std::string const& layout)
     : mWidth(width), mHeight(height) {
+    assert(mWidth * mHeight == layout.size());
     mTiles.resize(mWidth * mHeight);
     mInvalid.type = Tile::Wall;
     for (int x = 0; x < mWidth; ++x) {
       for (int y = 0; y < mHeight; ++y) {
+        char c = layout[y * mWidth + x];
         Tile& tile = at(x, y);
-        if (x  > 3 && y > 3) {
-          tile.type = Tile::Wall; // just a test
+        if (c == '#') {
+          tile.type = Tile::Wall;
         } else {
           tile.type = Tile::Walkable;
+          if (c != ' ') {
+            mPointOfInterest.insert(std::make_pair(c, vec2{(float)x + 0.5f, (float)y + 0.5f}));
+          }
         }
       }
     }
@@ -110,10 +116,11 @@ public:
         if (tile.type == Tile::Walkable) {
           // floor
           unsigned int idx = (unsigned int)out.vd.size();
-          out.vd.push_back({ vec3{ stride * x, 0.0f, stride * y }, floorColor });
-          out.vd.push_back({ vec3{ stride * x, 0.0f, stride * (y+1) }, floorColor });
-          out.vd.push_back({ vec3{ stride * (x+1), 0.0f, stride * y }, floorColor });
-          out.vd.push_back({ vec3{ stride * (x+1), 0.0f, stride * (y+1) }, floorColor });
+          vec3 norm{0,1,0};
+          out.vd.push_back({ vec3{ stride * x, 0.0f, stride * y }, norm, floorColor });
+          out.vd.push_back({ vec3{ stride * x, 0.0f, stride * (y+1) }, norm, floorColor });
+          out.vd.push_back({ vec3{ stride * (x+1), 0.0f, stride * y }, norm, floorColor });
+          out.vd.push_back({ vec3{ stride * (x+1), 0.0f, stride * (y+1) }, norm, floorColor });
           out.id.push_back(idx);
           out.id.push_back(idx+1);
           out.id.push_back(idx+2);
@@ -124,10 +131,11 @@ public:
           if (at(x+1, y).type == Tile::Wall) {
             // wall +x
             unsigned int idx = (unsigned int)out.vd.size();
-            out.vd.push_back({ vec3{ stride * (x+1), 0.0f, stride * y }, wallColor });
-            out.vd.push_back({ vec3{ stride * (x+1), 0.0f, stride * (y+1) }, wallColor });
-            out.vd.push_back({ vec3{ stride * (x+1), wallHeight, stride * y }, wallColor });
-            out.vd.push_back({ vec3{ stride * (x+1), wallHeight, stride * (y+1) }, wallColor });
+            vec3 norm{-1,0,0};
+            out.vd.push_back({ vec3{ stride * (x+1), 0.0f, stride * y }, norm, wallColor });
+            out.vd.push_back({ vec3{ stride * (x+1), 0.0f, stride * (y+1) }, norm, wallColor });
+            out.vd.push_back({ vec3{ stride * (x+1), wallHeight, stride * y }, norm, wallColor });
+            out.vd.push_back({ vec3{ stride * (x+1), wallHeight, stride * (y+1) }, norm, wallColor });
             out.id.push_back(idx);
             out.id.push_back(idx+1);
             out.id.push_back(idx+2);
@@ -138,10 +146,11 @@ public:
           if (at(x-1, y).type == Tile::Wall) {
             // wall -x
             unsigned int idx = (unsigned int)out.vd.size();
-            out.vd.push_back({ vec3{ stride * x, 0.0f, stride * y }, wallColor });
-            out.vd.push_back({ vec3{ stride * x, 0.0f, stride * (y+1) }, wallColor });
-            out.vd.push_back({ vec3{ stride * x, wallHeight, stride * y }, wallColor });
-            out.vd.push_back({ vec3{ stride * x, wallHeight, stride * (y+1) }, wallColor });
+            vec3 norm{1,0,0};
+            out.vd.push_back({ vec3{ stride * x, 0.0f, stride * y }, norm, wallColor });
+            out.vd.push_back({ vec3{ stride * x, 0.0f, stride * (y+1) }, norm, wallColor });
+            out.vd.push_back({ vec3{ stride * x, wallHeight, stride * y }, norm, wallColor });
+            out.vd.push_back({ vec3{ stride * x, wallHeight, stride * (y+1) }, norm, wallColor });
             out.id.push_back(idx);
             out.id.push_back(idx+2);
             out.id.push_back(idx+1);
@@ -152,10 +161,11 @@ public:
           if (at(x, y+1).type == Tile::Wall) {
             // wall +y
             unsigned int idx = (unsigned int)out.vd.size();
-            out.vd.push_back({ vec3{ stride * x, 0.0f, stride * (y+1) }, wallColor });
-            out.vd.push_back({ vec3{ stride * x, wallHeight, stride * (y+1) }, wallColor });
-            out.vd.push_back({ vec3{ stride * (x+1), wallHeight, stride * (y+1) }, wallColor });
-            out.vd.push_back({ vec3{ stride * (x+1), 0.0f, stride * (y+1) }, wallColor });
+            vec3 norm{0,0,-1};
+            out.vd.push_back({ vec3{ stride * x, 0.0f, stride * (y+1) }, norm, wallColor });
+            out.vd.push_back({ vec3{ stride * x, wallHeight, stride * (y+1) }, norm, wallColor });
+            out.vd.push_back({ vec3{ stride * (x+1), wallHeight, stride * (y+1) }, norm, wallColor });
+            out.vd.push_back({ vec3{ stride * (x+1), 0.0f, stride * (y+1) }, norm, wallColor });
             out.id.push_back(idx);
             out.id.push_back(idx+1);
             out.id.push_back(idx+2);
@@ -166,10 +176,11 @@ public:
           if (at(x, y-1).type == Tile::Wall) {
             // wall -y
             unsigned int idx = (unsigned int)out.vd.size();
-            out.vd.push_back({ vec3{ stride * x, 0.0f, stride * y }, wallColor });
-            out.vd.push_back({ vec3{ stride * x, wallHeight, stride * y }, wallColor });
-            out.vd.push_back({ vec3{ stride * (x+1), wallHeight, stride * y }, wallColor });
-            out.vd.push_back({ vec3{ stride * (x+1), 0.0f, stride * y }, wallColor });
+            vec3 norm{0,0,1};
+            out.vd.push_back({ vec3{ stride * x, 0.0f, stride * y }, norm, wallColor });
+            out.vd.push_back({ vec3{ stride * x, wallHeight, stride * y }, norm, wallColor });
+            out.vd.push_back({ vec3{ stride * (x+1), wallHeight, stride * y }, norm, wallColor });
+            out.vd.push_back({ vec3{ stride * (x+1), 0.0f, stride * y }, norm, wallColor });
             out.id.push_back(idx);
             out.id.push_back(idx+2);
             out.id.push_back(idx+1);
@@ -177,16 +188,39 @@ public:
             out.id.push_back(idx+3);
             out.id.push_back(idx+2);
           }
+        } else {
+          // blocked
+          vec4 black{0,0,0,1};
+          unsigned int idx = (unsigned int)out.vd.size();
+          vec3 norm{0,1,0};
+          out.vd.push_back({ vec3{ stride * x, wallHeight, stride * y }, norm, black });
+          out.vd.push_back({ vec3{ stride * x, wallHeight, stride * (y+1) }, norm, black });
+          out.vd.push_back({ vec3{ stride * (x+1), wallHeight, stride * y }, norm, black });
+          out.vd.push_back({ vec3{ stride * (x+1), wallHeight, stride * (y+1) }, norm, black });
+          out.id.push_back(idx);
+          out.id.push_back(idx+1);
+          out.id.push_back(idx+2);
+          out.id.push_back(idx+1);
+          out.id.push_back(idx+3);
+          out.id.push_back(idx+2);
         }
       }
     }
     return out;
+  }
+  vec2 pointOfInterest(char c) {
+    auto it = mPointOfInterest.find(c);
+    if (it != mPointOfInterest.end()) {
+      return it->second;
+    }
+    return vec2{0,0};
   }
 private:
   int mWidth;
   int mHeight;
   Tile mInvalid;
   std::vector<Tile> mTiles;
+  std::map<char, vec2> mPointOfInterest;
 };
 
 #endif // FRONTEND_MAP_HPP

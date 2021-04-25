@@ -12,12 +12,31 @@ using vec3 = mth::vector<float,3>;
 using vec4 = mth::vector<float,4>;
 using mat4 = mth::matrix<float,4,4>;
 
-struct vertex { vec3 pos; vec4 color; };
+struct vertex { vec3 pos; vec3 norm; vec4 color; };
 
 struct mesh {
   bool lines = true;
   std::vector<vertex> vd;
   std::vector<unsigned int> id;
+
+  void calculateNormals() {
+    assert(lines == false);
+    for (auto& v : vd) {
+      v.norm = vec3{0,0,0};
+    }
+    for (std::size_t i = 0; i < id.size(); i += 3) {
+      auto& p0 = vd[i + 0].pos;
+      auto& p1 = vd[i + 1].pos;
+      auto& p2 = vd[i + 2].pos;
+      auto normal = mth::normal(mth::cross(p1 - p0, p2 - p0));
+      vd[i + 0].norm += normal;
+      vd[i + 1].norm += normal;
+      vd[i + 2].norm += normal;
+    }
+    for (auto& v : vd) {
+      v.norm = mth::normal(v.norm);
+    }
+  }
 };
 
 inline vec3
@@ -44,11 +63,11 @@ generate_cylinder(float radius, float l, int detail, vec4 const& color) {
     auto theta = 2.0f * (float)mth::pi * (float)t / (float)(detail);
     vec3 normal{mth::sin(theta), 0.0f, mth::cos(theta)};
     auto position = radius * normal;
-    out.vd.push_back({position, color});
-    out.vd.push_back({position + vec3{0,l,0}, color});
+    out.vd.push_back({position, normal, color});
+    out.vd.push_back({position + vec3{0,l,0}, normal, color});
     
-    out.vd.push_back({position, color});
-    out.vd.push_back({position + vec3{0,l,0}, color});
+    out.vd.push_back({position, vec3{0,-1,0}, color});
+    out.vd.push_back({position + vec3{0,l,0}, vec3{0,1,0}, color});
   }
   
   for (int t = 0; t < detail - 1; ++t) {
@@ -87,7 +106,7 @@ generate_sphere(float radius, int detail, vec4 const& color, bool wire = false) 
       auto phi = (float)mth::pi * (float)p / (float)(detail-1);
       auto normal = normal_on_sphere(phi, theta);
       auto position = radius * normal;
-      out.vd.push_back({position, color});
+      out.vd.push_back({position, normal, color});
     }
   }
   if (wire) {
@@ -134,7 +153,7 @@ generate_sphere(float radius, int detail, vec4 const& color, bool wire = false) 
   return out;
 }
 
-inline mesh
+/*inline mesh
 generate_box(float x, float y, float z,
              vec4 const& color, bool wire = false) {
   auto hx = 0.5f * x;
@@ -200,9 +219,9 @@ generate_box(float x, float y, float z,
     }
   }
   return out;
-}
+  }*/
 
-inline mesh
+/*inline mesh
 generate_terrain(int width, int height,
                  vec4 const& color, bool wire = false) {
   mesh out;
@@ -245,7 +264,7 @@ generate_terrain(int width, int height,
     }
   }
   return out;
-}
+  }*/
 
 } // geometry
 

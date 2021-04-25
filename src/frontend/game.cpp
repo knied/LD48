@@ -7,6 +7,7 @@
 #include "alien.hpp"
 #include "projectile.hpp"
 #include "trigger.hpp"
+#include "tasks.hpp"
 
 #include "wasm.h"
 #include <stdio.h>
@@ -79,6 +80,17 @@ public:
     mEntities.push_back(e);
   }
 
+  void spawnConsole(vec2 const& pos) {
+    auto& state = GameState::instance();
+    auto e = state.scene.spawn();
+    auto& trans = e->add(state.transComp);
+    trans.position = vec3{pos(0), 0.0f, pos(1)};
+    auto& shape = e->add(state.shapeComp);
+    shape.drawable = mConsoleDrawable.get();
+    shape.color = vec4{0.2f, 0.2f, 0.2f, 1.0f};
+    mEntities.push_back(e);
+  }
+
   void initLevel(int level) {
     mLevelComplete = false;
     mGameOver = false;
@@ -101,7 +113,7 @@ public:
       auto& shape = e->add(state.shapeComp);
       shape.drawable = mChargerDrawable.get();
       auto& trigger = e->add(state.triggerComp);
-      trigger.pos = vec2{5,2};
+      trigger.pos = mMap.pointOfInterest('C');
       auto& behavior = e->add(state.behaviorComp);
       behavior.onUpdateHandler = &mTriggerBehavior;
     }
@@ -110,13 +122,17 @@ public:
     case 0: {
       // Nothing to do.
       // Player navigates to charging station
-      commonInit(vec2{1,1});
+      commonInit(mMap.pointOfInterest('0'));
+      spawnConsole(mMap.pointOfInterest('a'));
+      spawnConsole(mMap.pointOfInterest('b'));
     } break;
     case 1: {
       // Invaders! Kill alien.
       // Player navigates to charging station
-      commonInit(vec2{1,1});
-      spawnAlien(vec2{2,5});
+      commonInit(mMap.pointOfInterest('C'));
+      spawnAlien(mMap.pointOfInterest('1'));
+      spawnAlien(mMap.pointOfInterest('5'));
+      spawnAlien(mMap.pointOfInterest('6'));
     } break;
     default: {
       // Nothing to do.
@@ -152,13 +168,39 @@ public:
   }
   
   Game(gl::context ctx)
-    : mMap(10, 10)
+    : mMap(24, 24, "\
+########   ab   ########\
+########  0     ########\
+###    #        #    ###\
+### 9  # ###### #    ###\
+###      #    #    7 ###\
+###    # # 8  # #    ###\
+######## #    # ########\
+######## #### # ########\
+#                      #\
+## ### ########## ### ##\
+#   ##  ########  ##6  #\
+#C  ##  ########  ##   #\
+###### ########## ######\
+######  ########  ######\
+######  ########  ######\
+###### ########## ######\
+######  ########  ######\
+######  ########  ######\
+######  ########  ######\
+###### ########## ######\
+#             4        #\
+#      2          5    #\
+#  1       3           #\
+##   ###   ##   ###   ##\
+")
     , mPlayerBehavior(&mMap)
     , mAlienBehavior(&mMap)
     , mProjectileBehavior(&mMap)
     , mRenderer(ctx)
     , mActorDrawable(mRenderer.createDrawable(actorMesh()))
-    , mProjectileDrawable(mRenderer.createDrawable(geometry::generate_sphere(0.05f, 5, vec4{1,1,1,1}))){
+    , mProjectileDrawable(mRenderer.createDrawable(geometry::generate_sphere(0.05f, 5, vec4{1,1,1,1})))
+    , mConsoleDrawable(mRenderer.createDrawable((consoleMesh()))) {
     printf("C Game\n");
     fflush(stdout);
     initLevel(mLevel);
@@ -227,6 +269,7 @@ private:
   std::unique_ptr<Drawable> mProjectileDrawable;
   std::unique_ptr<Drawable> mMapDrawable;
   std::unique_ptr<Drawable> mChargerDrawable;
+  std::unique_ptr<Drawable> mConsoleDrawable;
   std::vector<Entity*> mEntities;
   int mLevel = 0;
   bool mFocus = false;

@@ -66,7 +66,7 @@ public:
     Entity* bullet = state.projectiles[state.nextProjectile++];
     if (state.nextProjectile >= state.projectiles.size()) state.nextProjectile = 0;
     auto& projectile = bullet->get(state.projectileComp);
-    projectile.pos = actor.pos + 0.1f * actor.lookDir;
+    projectile.pos = actor.pos + 0.2f * actor.lookDir;
     projectile.move = 6.0f * actor.lookDir;
     projectile.damage = 20;
     projectile.faction = actor.faction;

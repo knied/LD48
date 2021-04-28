@@ -25,6 +25,7 @@ public:
         for (auto other : state.scene.with(state.actorComp)) {
           auto& otherActor = other->get(state.actorComp);
           if (otherActor.health <= 0) continue;
+          if (otherActor.faction == projectile.faction) continue;
           if (mth::length(otherActor.pos - projectile.pos) < (0.1f + radius)) {
             // we hit an actor
             otherActor.health -= projectile.damage;

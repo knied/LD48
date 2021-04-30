@@ -1,4 +1,5 @@
 .sconsign.dblite
+.DS_Store
 /install
 /build_dep
 /build

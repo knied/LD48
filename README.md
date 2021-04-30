@@ -1,4 +1,11 @@
-# Instructions
+# Deep Space Janitor
+
+This is my entry for the 48h variant of Ludum Dare 48:
+https://ldjam.com/events/ludum-dare/48/deep-space-janitor
+
+Only the game part in `src/frontend` was written during the 48 hours. The rest is considered engine/base code.
+
+# Server Instructions
 
 The following instructions are for macos only. I assume you can get this project to compile and run on Linux without too much hassle. But I have not tried it myself. Windows would presumably require a bit more tinkering with the dependencies.
 
@@ -27,8 +34,9 @@ Unpack the sysroot package and place it somewhere for the build to find.
 
 The scons build expects a few environment variables to be set:
 
-```:template-setup.sh
-
+```
+export HOMEBREW_PREFIX=/usr/local
+export WASI_SYSROOT=/path/to/wasi-sysroot
 ```
 
 ## Compile
